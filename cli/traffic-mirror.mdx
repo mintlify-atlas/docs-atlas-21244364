@@ -1,0 +1,297 @@
+---
+title: "Traffic Mirror Commands"
+description: "Set up traffic mirroring for Metlo on AWS and GCP"
+---
+
+## Overview
+
+The Metlo CLI can automatically configure traffic mirroring in AWS and GCP to send a copy of your network traffic to Metlo for analysis. This enables real-time API discovery and security monitoring.
+
+## AWS Traffic Mirroring
+
+Set up traffic mirroring for AWS resources including EC2 instances, network interfaces, ECS services, and Application Load Balancers.
+
+### Create New Mirror Session
+
+```bash
+metlo traffic-mirror aws new
+```
+
+#### Options
+
+<ParamField path="-i, --id" type="string">
+  UUID identifier for this mirror configuration. If not provided, a new UUID will be generated.
+</ParamField>
+
+<ParamField path="-r, --region" type="string">
+  AWS Region where source and target are located (e.g., `us-east-1`, `us-west-2`)
+</ParamField>
+
+<ParamField path="-t, --target-eni-id" type="string">
+  Target ENI (Elastic Network Interface) ID or EC2 instance ID of your Metlo mirroring instance
+</ParamField>
+
+<ParamField path="-s, --source-id" type="string">
+  Source entity ID to mirror. Format depends on the variant:
+  - **INSTANCE**: EC2 instance ID (e.g., `i-1234567890abcdef0`)
+  - **NETWORK_INTERFACE**: ENI ID (e.g., `eni-1234567890abcdef0`)
+  - **ALB**: Load balancer name
+  - **ECS**: `clusterName,serviceName` (comma-separated)
+</ParamField>
+
+<ParamField path="-v, --variant" type="string">
+  Type of AWS resource to mirror. Options:
+  - `INSTANCE` - EC2 instance
+  - `NETWORK_INTERFACE` - Network interface
+  - `ALB` - Application Load Balancer
+  - `ECS` - ECS service
+</ParamField>
+
+#### Interactive Mode
+
+If you run the command without options, the CLI will guide you through the setup:
+
+```bash
+metlo traffic-mirror aws new
+```
+
+**Example prompts:**
+
+```
+? What type of source do you want to mirror?
+  ❯ INSTANCE
+    NETWORK_INTERFACE
+    ALB
+    ECS
+
+? Select the id of your EC2 Instance
+  ❯ WebServer: i-0123456789abcdef0
+    APIServer: i-abcdef0123456789
+
+? Enter the id of your Metlo Mirroring Instance: i-0987654321fedcba
+```
+
+#### Examples
+
+**Mirror an EC2 instance:**
+
+```bash
+metlo traffic-mirror aws new \
+  --region us-east-1 \
+  --variant INSTANCE \
+  --source-id i-0123456789abcdef0 \
+  --target-eni-id eni-0987654321fedcba
+```
+
+**Mirror an Application Load Balancer:**
+
+```bash
+metlo traffic-mirror aws new \
+  --region us-west-2 \
+  --variant ALB \
+  --source-id my-load-balancer \
+  --target-eni-id eni-0987654321fedcba
+```
+
+**Mirror an ECS service:**
+
+```bash
+metlo traffic-mirror aws new \
+  --region us-east-1 \
+  --variant ECS \
+  --source-id my-cluster,my-service \
+  --target-eni-id eni-0987654321fedcba
+```
+
+#### Output
+
+On success, the command displays a cron job configuration for periodic refresh:
+
+```
+Success!
+
+If you want metlo to periodically refresh the mirroring sessions, add this to your crontab on a cloud instance:
+$ crontab -e
+$ */5 * * * * /usr/local/bin/metlo traffic-mirror aws new --target-eni-id eni-xxx --source-id "i-xxx" --region "us-east-1" -i abc-123 --variant "INSTANCE"
+```
+
+### List Mirror Sessions
+
+List all active traffic mirror sessions in AWS.
+
+```bash
+metlo traffic-mirror aws list
+```
+
+This command displays all mirror sessions tagged with Metlo identifiers in your AWS account.
+
+### Remove Mirror Session
+
+Remove a traffic mirror session.
+
+```bash
+metlo traffic-mirror aws remove
+```
+
+The CLI will prompt you to select which mirror session to remove.
+
+---
+
+## GCP Traffic Mirroring
+
+Set up packet mirroring for GCP resources including compute instances, subnets, and tagged instances.
+
+### Create New Packet Mirroring
+
+```bash
+metlo traffic-mirror gcp new
+```
+
+#### Options
+
+<ParamField path="-f, --force" type="boolean">
+  Force creation of a new packet mirroring instance even if one already exists. Default: false
+</ParamField>
+
+#### Interactive Setup
+
+The GCP traffic mirroring setup is fully interactive. The CLI will guide you through:
+
+1. **GCP Project Configuration**
+   - Project ID
+   - Network name (default: `default`)
+   - Zone selection
+   - Path to GCP service account key file
+
+2. **Source Selection**
+   - Choose source type: `INSTANCE`, `SUBNET`, or `TAG`
+   - Provide instance name, subnet name, or tag name
+
+3. **Metlo Instance Configuration**
+   - Select machine type for the mirror instance
+   - Provide Metlo backend URL
+   - Provide Metlo API key
+
+#### Example
+
+```bash
+metlo traffic-mirror gcp new
+```
+
+**Example session:**
+
+```
+? GCP Project ID: my-project-123
+? GCP Network to mirror: default
+? Select your GCP zone: us-central1-a
+? Path to GCP key file: /path/to/service-account-key.json
+✓ Validated account details
+
+? Select your mirror source type:
+  ❯ INSTANCE
+    SUBNET
+    TAG
+
+? Enter the mirror source instance name: web-server-1
+✓ Verified mirror source details
+
+? Mirror Instance Type: e2-standard-2
+? Metlo URL: https://metlo.example.com
+? Metlo API Key: metlo.abc123...
+
+✓ Creating Destination subnet
+✓ Created inbound firewall rule
+✓ Created outbound firewall rule
+✓ Obtained router details
+✓ Created MIG for metlo
+✓ Created health check
+✓ Creating Backend service for packet mirroring
+✓ Created load balancer
+✓ Started packet mirroring
+```
+
+#### Update Existing Packet Mirroring
+
+If packet mirroring already exists for the specified network (and `--force` is not used), the CLI will offer to update the existing configuration:
+
+```
+Updating the existing Packet Mirroring instance instead of creating new.
+
+? Select Packet Mirroring instance: metlo-packet-mirroring-abc123
+? Select your mirror source type: INSTANCE
+? Enter the mirror source instance name: new-web-server
+✓ Updated packet mirroring
+```
+
+### List Packet Mirroring
+
+List all packet mirroring configurations.
+
+```bash
+metlo traffic-mirror gcp list
+```
+
+### Remove Packet Mirroring
+
+Remove a packet mirroring configuration.
+
+```bash
+metlo traffic-mirror gcp remove
+```
+
+### Cleanup Resources
+
+Clean up GCP resources created by Metlo.
+
+```bash
+metlo traffic-mirror gcp cleanup
+```
+
+This command helps remove orphaned resources like subnets, firewall rules, and instance groups created during packet mirroring setup.
+
+---
+
+## What Gets Created
+
+### AWS Resources
+
+When you create an AWS traffic mirror session, Metlo creates:
+
+- Traffic mirror target (pointing to your Metlo instance)
+- Traffic mirror filter (allowing all TCP traffic)
+- Traffic mirror session(s) (one per network interface)
+- Tags with UUID for resource tracking
+
+### GCP Resources
+
+When you create GCP packet mirroring, Metlo creates:
+
+- Destination subnet for mirror traffic
+- Inbound and outbound firewall rules
+- Cloud Router (or uses existing compatible router)
+- Managed Instance Group for Metlo collector
+- Instance template with startup script
+- Health check for backend service
+- Backend service
+- Internal load balancer (forwarding rule)
+- Packet mirroring policy
+
+---
+
+## Troubleshooting
+
+### AWS
+
+**Session already exists error:**
+The CLI automatically deduplicates and skips ENIs that already have Metlo mirror sessions.
+
+**Invalid credentials:**
+Ensure your AWS credentials are configured (`aws configure`) and have the necessary permissions for EC2, ECS, and ELB operations.
+
+### GCP
+
+**Invalid key file:**
+Make sure your GCP service account key file exists and has the required permissions for Compute Engine operations.
+
+**Node version error:**
+Node.js 16 or higher is required. Use `nvm` to install a compatible version.

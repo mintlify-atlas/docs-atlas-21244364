@@ -1,0 +1,495 @@
+---
+title: Endpoints API
+description: Manage and query your API endpoints discovered by Metlo
+---
+
+The Endpoints API allows you to retrieve, update, and manage API endpoints that Metlo has discovered in your infrastructure.
+
+## List Endpoints
+
+Retrieve a list of API endpoints with optional filtering.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/endpoints?limit=20&offset=0' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Query Parameters
+
+<ParamField query="hosts" type="string[]">
+  Filter by hostnames
+</ParamField>
+
+<ParamField query="riskScores" type="enum[]">
+  Filter by risk scores: `HIGH`, `MEDIUM`, `LOW`, `NONE`
+</ParamField>
+
+<ParamField query="methods" type="enum[]">
+  Filter by HTTP methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`
+</ParamField>
+
+<ParamField query="dataClasses" type="string[]">
+  Filter by detected data classes (e.g., `email`, `ssn`, `credit_card`)
+</ParamField>
+
+<ParamField query="resourcePermissions" type="string[]">
+  Filter by resource permissions
+</ParamField>
+
+<ParamField query="searchQuery" type="string">
+  Text search across endpoint paths and metadata
+</ParamField>
+
+<ParamField query="isAuthenticated" type="string">
+  Filter by authentication status: `true`, `false`, or omit for all
+</ParamField>
+
+<ParamField query="hostType" type="enum" default="ANY">
+  Filter by host type: `ANY`, `EXTERNAL`, `INTERNAL`
+</ParamField>
+
+<ParamField query="offset" type="number" default="0">
+  Number of results to skip for pagination
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Maximum number of results to return
+</ParamField>
+
+### Response
+
+<ResponseField name="endpoints" type="ApiEndpoint[]">
+  Array of endpoint objects
+</ResponseField>
+
+```json Response Example
+[
+  {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "path": "/api/users/{id}",
+    "host": "api.example.com",
+    "method": "GET",
+    "riskScore": "MEDIUM",
+    "dataClasses": ["email", "phone_number"],
+    "resourcePermissions": ["user:read"],
+    "firstDetected": "2026-02-15T10:30:00.000Z",
+    "lastActive": "2026-03-03T12:00:00.000Z",
+    "isAuthenticatedDetected": true,
+    "isAuthenticatedUserSet": false,
+    "fullTraceCaptureEnabled": false,
+    "isGraphQl": false,
+    "openapiSpecName": "users-api-v1",
+    "owner": "platform-team",
+    "createdAt": "2026-02-15T10:30:00.000Z",
+    "updatedAt": "2026-03-03T12:00:00.000Z"
+  }
+]
+```
+
+## Get Endpoint Details
+
+Retrieve detailed information about a specific endpoint.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Path Parameters
+
+<ParamField path="endpointId" type="uuid" required>
+  The unique identifier of the endpoint
+</ParamField>
+
+### Response
+
+<ResponseField name="uuid" type="string">
+  Unique identifier for the endpoint
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  The endpoint path (e.g., `/api/users/{id}`)
+</ResponseField>
+
+<ResponseField name="host" type="string">
+  The hostname where the endpoint is located
+</ResponseField>
+
+<ResponseField name="method" type="string">
+  HTTP method (GET, POST, PUT, PATCH, DELETE, etc.)
+</ResponseField>
+
+<ResponseField name="riskScore" type="enum">
+  Security risk score: `HIGH`, `MEDIUM`, `LOW`, or `NONE`
+</ResponseField>
+
+<ResponseField name="dataClasses" type="string[]">
+  Detected sensitive data classes in the endpoint
+</ResponseField>
+
+<ResponseField name="dataFields" type="DataField[]">
+  Detailed information about data fields
+</ResponseField>
+
+<ResponseField name="alerts" type="Alert[]">
+  Security alerts associated with this endpoint
+</ResponseField>
+
+<ResponseField name="traces" type="ApiTrace[]">
+  Recent API traces captured for this endpoint
+</ResponseField>
+
+<ResponseField name="openapiSpec" type="object">
+  OpenAPI specification for this endpoint (if available)
+</ResponseField>
+
+<ResponseField name="graphQlSchema" type="string">
+  GraphQL schema (if this is a GraphQL endpoint)
+</ResponseField>
+
+## Get Endpoint Usage
+
+Retrieve usage statistics for an endpoint.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}/usage' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Response
+
+<ResponseField name="dailyUsage" type="array">
+  Array of daily usage statistics
+  <Expandable title="properties">
+    <ResponseField name="day" type="string">
+      Date in ISO format
+    </ResponseField>
+    <ResponseField name="cnt" type="number">
+      Number of requests on that day
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="last1MinCnt" type="number">
+  Number of requests in the last minute
+</ResponseField>
+
+```json Response Example
+{
+  "dailyUsage": [
+    { "day": "2026-03-01T00:00:00.000Z", "cnt": 1523 },
+    { "day": "2026-03-02T00:00:00.000Z", "cnt": 1789 },
+    { "day": "2026-03-03T00:00:00.000Z", "cnt": 894 }
+  ],
+  "last1MinCnt": 3
+}
+```
+
+## Update Endpoint Authentication Status
+
+Manually set whether an endpoint is authenticated.
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}/authenticated' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{"authenticated": true}'
+```
+
+### Request Body
+
+<ParamField body="authenticated" type="boolean" required>
+  Whether the endpoint requires authentication
+</ParamField>
+
+### Response
+
+```json
+"Success"
+```
+
+## Enable Full Trace Capture
+
+Enable or disable full trace capture for an endpoint.
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}/enable-full-trace-capture' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled": true}'
+```
+
+### Request Body
+
+<ParamField body="enabled" type="boolean" required>
+  Whether to enable full trace capture
+</ParamField>
+
+## Delete Endpoint
+
+Delete a specific endpoint.
+
+```bash cURL
+curl -X DELETE 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Response
+
+```json
+"Success"
+```
+
+## Delete Multiple Endpoints
+
+Delete multiple endpoints based on their UUIDs.
+
+```bash cURL
+curl -X DELETE 'https://<your-metlo-instance>/api/v1/endpoints' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "uuids": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    ]
+  }'
+```
+
+### Request Body
+
+<ParamField body="uuids" type="string[]" required>
+  Array of endpoint UUIDs to delete
+</ParamField>
+
+## Get Suggested Paths
+
+Get suggested path normalizations for an endpoint.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}/suggested-paths' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Response
+
+Returns an array of suggested path patterns based on observed traffic.
+
+## Update Endpoint Paths
+
+Update the path pattern for an endpoint.
+
+```bash cURL
+curl -X POST 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}/update-paths' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{"paths": ["/api/users/{userId}"]}'
+```
+
+### Request Body
+
+<ParamField body="paths" type="string[]" required>
+  Array of path patterns to use
+</ParamField>
+
+## GraphQL Endpoints
+
+### Upload GraphQL Schema
+
+Upload a GraphQL schema for an endpoint.
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}/graphql-schema' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -F 'file=@schema.graphql'
+```
+
+### Delete GraphQL Schema
+
+Remove the GraphQL schema from an endpoint.
+
+```bash cURL
+curl -X DELETE 'https://<your-metlo-instance>/api/v1/endpoint/{endpointId}/graphql-schema' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+## Get Hosts
+
+Retrieve a list of all hosts.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/hosts?limit=20&offset=0' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Query Parameters
+
+<ParamField query="searchQuery" type="string">
+  Text search for host names
+</ParamField>
+
+<ParamField query="hostType" type="enum" default="ANY">
+  Filter by type: `ANY`, `EXTERNAL`, `INTERNAL`
+</ParamField>
+
+<ParamField query="sortBy" type="enum" default="NUM_ENDPOINTS">
+  Sort by field: `NUM_ENDPOINTS`, `NAME`, etc.
+</ParamField>
+
+<ParamField query="sortOrder" type="enum" default="DESC">
+  Sort order: `ASC` or `DESC`
+</ParamField>
+
+<ParamField query="offset" type="number" default="0">
+  Pagination offset
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Results limit
+</ParamField>
+
+### Response
+
+```json
+[
+  {
+    "host": "api.example.com",
+    "numEndpoints": 45,
+    "isPublic": true
+  }
+]
+```
+
+## Delete Hosts
+
+Delete multiple hosts and all their endpoints.
+
+```bash cURL
+curl -X DELETE 'https://<your-metlo-instance>/api/v1/hosts' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{"hosts": ["api.example.com", "old-api.example.com"]}'
+```
+
+### Request Body
+
+<ParamField body="hosts" type="string[]" required>
+  Array of hostnames to delete
+</ParamField>
+
+## Get Hosts Graph
+
+Retrieve a graph visualization of host relationships.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/hosts-graph' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Response
+
+<ResponseField name="hosts" type="object">
+  Map of hostnames to their metadata
+</ResponseField>
+
+<ResponseField name="edges" type="array">
+  Array of connections between hosts
+  <Expandable title="properties">
+    <ResponseField name="srcHost" type="string">
+      Source hostname
+    </ResponseField>
+    <ResponseField name="dstHost" type="string">
+      Destination hostname
+    </ResponseField>
+    <ResponseField name="numEndpoints" type="number">
+      Number of endpoint connections
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## New Detections
+
+Get newly detected endpoints and data fields.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/new-detections?start=2026-03-01&end=2026-03-03&detectionType=ENDPOINT' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Query Parameters
+
+<ParamField query="start" type="string">
+  Start date for detection range (ISO 8601)
+</ParamField>
+
+<ParamField query="end" type="string">
+  End date for detection range (ISO 8601)
+</ParamField>
+
+<ParamField query="detectionType" type="enum" default="ENDPOINT">
+  Type of detection: `ENDPOINT` or `DATA_FIELD`
+</ParamField>
+
+<ParamField query="detectionRiskScores" type="enum[]" default="[]">
+  Filter by risk scores
+</ParamField>
+
+<ParamField query="detectionHosts" type="string[]" default="[]">
+  Filter by hosts
+</ParamField>
+
+<ParamField query="detectionOffset" type="number" default="0">
+  Pagination offset
+</ParamField>
+
+<ParamField query="detectionLimit" type="number" default="10">
+  Results limit (max 50)
+</ParamField>
+
+## Get New Detections Aggregate
+
+Get aggregated new detection statistics.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/new-detections-agg' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Response
+
+```json
+[
+  {
+    "day": "2026-03-01",
+    "numEndpoints": 5,
+    "numFields": 12
+  },
+  {
+    "day": "2026-03-02",
+    "numEndpoints": 3,
+    "numFields": 8
+  }
+]
+```
+
+## Error Responses
+
+### 404 Not Found
+
+```json
+"Endpoint does not exist."
+```
+
+Returned when the specified endpoint UUID is not found.
+
+### 400 Bad Request
+
+```json
+{
+  "type": "ZOD",
+  "message": "Invalid parameters",
+  "err": {}
+}
+```
+
+Returned when query parameters or request body fail validation.

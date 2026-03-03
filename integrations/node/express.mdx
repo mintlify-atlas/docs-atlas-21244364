@@ -1,0 +1,161 @@
+---
+title: Express Integration
+description: Add Metlo to your Express.js application for API security monitoring
+---
+
+Metlo's Node.js agent provides native support for Express applications through automatic instrumentation.
+
+## Installation
+
+Install the Metlo package from npm:
+
+<CodeGroup>
+```bash npm
+npm install metlo
+```
+
+```bash yarn
+yarn add metlo
+```
+
+```bash pnpm
+pnpm add metlo
+```
+</CodeGroup>
+
+## Quick Start
+
+Add Metlo to your Express application by requiring it at the start of your main script:
+
+```javascript
+var metlo = require("metlo")
+metlo("<YOUR_METLO_API_KEY>", "<YOUR_METLO_COLLECTOR_URL>")
+
+// Then initialize Express as usual
+const express = require("express")
+const app = express()
+
+app.get("/", (req, res) => {
+  res.send("Hello World!")
+})
+
+app.listen(3000)
+```
+
+<Warning>
+The `metlo()` call must be placed **before** you require Express and set up your application. This allows Metlo to instrument the Express framework properly.
+</Warning>
+
+## Configuration
+
+### Required Parameters
+
+<ParamField path="apiKey" type="string" required>
+  Your Metlo API key for authentication with the collector
+</ParamField>
+
+<ParamField path="collectorUrl" type="string" required>
+  The URL of your Metlo collector instance (e.g., `https://collector.metlo.com`)
+</ParamField>
+
+### Optional Configuration
+
+You can pass an optional configuration object as the third parameter:
+
+```javascript
+var metlo = require("metlo")
+metlo("<YOUR_METLO_API_KEY>", "<YOUR_METLO_COLLECTOR_URL>", {
+  apiHost: "https://api.example.com",
+})
+```
+
+<ParamField path="apiHost" type="string">
+  Override the host value sent in trace data. Useful when your application is behind a proxy.
+</ParamField>
+
+## How It Works
+
+Metlo's Express integration uses `require-in-the-middle` to automatically instrument Express's response methods:
+
+1. **Intercepts responses** - Patches `res.send()`, `res.json()`, `res.jsonp()`, and `res.sendFile()`
+2. **Captures request/response data** - Collects headers, body, query parameters, and metadata
+3. **Asynchronous transmission** - Sends data to Metlo collector using a worker pool
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers
+- Request body
+- Source IP and port
+
+**Response:**
+- Status code
+- Headers
+- Response body
+- Destination IP and port
+
+**Metadata:**
+- Environment (from `process.env.NODE_ENV`)
+- Source identifier: `node/express`
+- Timestamp
+
+## Example with TypeScript
+
+```typescript
+import metlo from "metlo"
+metlo(process.env.METLO_API_KEY!, process.env.METLO_COLLECTOR_URL!)
+
+import express from "express"
+const app = express()
+
+app.use(express.json())
+
+app.post("/api/users", (req, res) => {
+  // Your application logic
+  res.json({ success: true })
+})
+
+app.listen(3000, () => {
+  console.log("Server running on port 3000")
+})
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Metlo not capturing requests">
+    Ensure that:
+    - `metlo()` is called **before** requiring Express
+    - Your collector URL is correct and accessible
+    - Your API key is valid
+    - Check console for any error messages
+  </Accordion>
+
+  <Accordion title="Performance concerns">
+    Metlo uses a worker pool to send data asynchronously, minimizing impact on request latency. The worker pool size is automatically set based on CPU count.
+  </Accordion>
+
+  <Accordion title="Large response bodies">
+    Metlo captures the full response body. For very large responses, consider implementing body size limits in your application.
+  </Accordion>
+</AccordionGroup>
+
+## Requirements
+
+- Node.js >= 11.7.0
+- Express (any version)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="View API Inventory" icon="list" href="/features/endpoint-discovery">
+    See your discovered APIs in the Metlo dashboard
+  </Card>
+  <Card title="Configure Alerts" icon="bell" href="/configuration/alerts-webhooks">
+    Set up alerts for sensitive data exposure
+  </Card>
+</CardGroup>

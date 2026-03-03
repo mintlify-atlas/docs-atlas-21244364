@@ -1,0 +1,202 @@
+---
+title: "Fuzz Testing"
+description: "Run automated fuzz testing to discover vulnerabilities"
+---
+
+## Overview
+
+The Metlo CLI includes a fuzzing capability that automatically tests your API endpoints for common vulnerabilities like SQL injection and XSS by injecting attack payloads into request parameters.
+
+## Command
+
+```bash
+metlo fuzz
+```
+
+## Options
+
+<ParamField path="-h, --host" type="string" required>
+  The hostname to run fuzz tests against (e.g., `api.example.com`)
+</ParamField>
+
+<ParamField path="-v, --verbose" type="boolean">
+  Print detailed test errors and response information
+</ParamField>
+
+<ParamField path="--envfile" type="string">
+  Path to a `.env` file containing environment variables for test execution
+</ParamField>
+
+<ParamField path="--env" type="key=value">
+  Set individual environment variables (can be used multiple times). Format: `--env KEY=value`
+</ParamField>
+
+## How It Works
+
+1. **Fetch Endpoints**: The CLI fetches all endpoints for the specified host from your Metlo backend
+2. **Generate Attack Tests**: For each endpoint, it generates tests using attack payloads:
+   - `SQLI_TIME` - Time-based SQL injection payloads
+   - `XSS` - Cross-site scripting payloads
+3. **Inject Payloads**: Attack payloads are injected into:
+   - Query parameters (first parameter)
+   - Form data (first field)
+   - JSON body (first key)
+4. **Detect Vulnerabilities**: Tests check if the response time is abnormal (>1000ms for SQL injection) which may indicate successful exploitation
+
+## Examples
+
+**Basic fuzz testing:**
+
+```bash
+metlo fuzz --host api.example.com
+```
+
+**Fuzz testing with verbose output:**
+
+```bash
+metlo fuzz --host api.example.com -v
+```
+
+**Fuzz testing with environment variables:**
+
+```bash
+metlo fuzz --host api.example.com --envfile .env.prod --env API_KEY=abc123
+```
+
+## Attack Payloads
+
+The fuzzer uses the `ATTACK_PAYLOAD` variable which is substituted with different attack vectors:
+
+### SQL Injection (Time-Based)
+
+Payloads designed to cause database delays:
+
+- Tests if the database executes injected SQL commands
+- Monitors response time to detect successful injection
+- Fails if response takes longer than 1000ms
+
+### XSS (Cross-Site Scripting)
+
+Payloads designed to inject scripts:
+
+- Tests if user input is reflected without proper encoding
+- Checks if script tags can be injected
+
+## Test Generation
+
+For each endpoint, the fuzzer generates a test with:
+
+```yaml
+meta:
+  name: "/api/endpoint SQL_INJECTION TIME BASED"
+  severity: HIGH
+
+options:
+  stopOnFailure: true
+
+steps:
+  - request:
+      # Modified request with attack payload
+    assertions:
+      - resp.duration < 1000  # Fail if response is slow
+```
+
+## Output
+
+**Running tests:**
+
+```
+⠋ Running tests...
+```
+
+**Success (no vulnerabilities found):**
+
+```
+✓ 24/24 tests succeeded...
+```
+
+**Failure (vulnerability detected):**
+
+```
+✗ 2/24 tests failed...
+2 tests failed on endpoint POST api.example.com/api/search:
+https://metlo.example.com/endpoint/abc-123/test/def-456
+```
+
+**With verbose output, you'll see:**
+
+```
+Request 1 Assertion 1 Failed:
+{
+  "key": "resp.duration",
+  "action": "lt",
+  "value": 1000,
+  "description": "resp.duration < 1000"
+}
+{
+  "ctx": { /* test context */ },
+  "request": { /* request details */ },
+  "response": { /* response details */ }
+}
+```
+
+## Interpreting Results
+
+### Slow Response Times
+
+If a SQL injection test fails (response > 1000ms), it may indicate:
+
+- **Potential SQL Injection**: The database executed the injected SQL delay command
+- **Slow Endpoint**: The endpoint is naturally slow (check verbose output)
+- **Network Issues**: Temporary network latency
+
+**Action**: Investigate the endpoint and sanitize user input.
+
+### Test Failures
+
+Any test failure should be investigated:
+
+1. Review the attack payload that was injected
+2. Check the response time and content
+3. Verify input validation and sanitization in your code
+4. Consider using parameterized queries and output encoding
+
+## Limitations
+
+- **Injection Points**: Only tests the first parameter/field in queries, forms, and JSON bodies
+- **Attack Types**: Currently supports SQL injection (time-based) and XSS payloads
+- **False Positives**: Slow endpoints may trigger false positives for SQL injection
+- **Authentication**: Requires valid credentials in environment variables
+
+## Best Practices
+
+1. **Run Regularly**: Include fuzz testing in your CI/CD pipeline
+2. **Use Staging**: Run against staging environments, not production
+3. **Review Results**: Always investigate failures, even potential false positives
+4. **Combine Approaches**: Use fuzz testing alongside other security testing methods
+5. **Set Environment Variables**: Use `--envfile` for authentication tokens and API keys
+
+## Exit Codes
+
+- **Exit code 0**: All fuzz tests passed (no vulnerabilities detected)
+- **Exit code 1**: One or more tests failed (potential vulnerability)
+
+## Integration with CI/CD
+
+Example GitHub Actions workflow:
+
+```yaml
+- name: Run Metlo Fuzz Tests
+  run: |
+    metlo fuzz --host ${{ secrets.API_HOST }} --env API_KEY=${{ secrets.API_KEY }}
+```
+
+Example GitLab CI:
+
+```yaml
+fuzz-test:
+  script:
+    - metlo fuzz --host ${API_HOST} --env API_KEY=${API_KEY}
+  only:
+    - main
+```

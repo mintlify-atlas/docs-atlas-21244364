@@ -1,0 +1,321 @@
+---
+title: "Alerts & Webhooks"
+description: "Configure webhooks to receive real-time security alerts from Metlo"
+---
+
+Metlo can send real-time notifications to external services when security issues are detected. Configure webhooks to integrate with Slack, PagerDuty, custom monitoring systems, or any HTTP endpoint.
+
+## Overview
+
+Webhooks allow you to:
+
+- Receive immediate notifications for security alerts
+- Filter alerts by type and host
+- Integrate with incident management systems
+- Build custom alerting workflows
+
+## Alert Types
+
+Metlo generates alerts for the following security issues:
+
+| Alert Type | Description |
+|------------|-------------|
+| `New Endpoint Detected` | A previously unknown API endpoint was discovered |
+| `PII Data Detected` | Personally Identifiable Information found in API traffic |
+| `Open API Spec Diff` | Endpoint behavior differs from OpenAPI specification |
+| `Sensitive Data in Query Params` | PII or sensitive data exposed in URL query parameters |
+| `Sensitive Data in Path Params` | PII or sensitive data exposed in URL path |
+| `Basic Authentication Detected` | Endpoint using basic authentication (security risk) |
+| `Endpoint not secured by SSL` | Unencrypted HTTP endpoint detected |
+| `Unauthenticated Endpoint returning Sensitive Data` | Sensitive data accessible without authentication |
+
+## Creating Webhooks
+
+### Via UI
+
+1. Navigate to **Settings** > **Webhooks** in the Metlo dashboard
+2. Click **Create Webhook**
+3. Enter the webhook URL
+4. (Optional) Select specific alert types to filter
+5. (Optional) Select specific hosts to monitor
+6. Click **Save**
+
+### Via API
+
+Create a webhook programmatically using the Metlo API:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/webhook \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-webhook-endpoint.com/metlo-alerts",
+    "alertTypes": ["PII Data Detected", "New Endpoint Detected"],
+    "hosts": ["api.example.com"]
+  }'
+```
+
+## Webhook Configuration
+
+### URL
+
+<ParamField path="url" type="string" required>
+  The HTTPS/HTTP endpoint where webhook payloads will be sent. Must be a valid URL.
+</ParamField>
+
+```json
+{
+  "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+}
+```
+
+### Alert Type Filters
+
+<ParamField path="alertTypes" type="array" default="[]">
+  Array of alert types to trigger this webhook. If empty, all alert types trigger the webhook.
+</ParamField>
+
+```json
+{
+  "alertTypes": [
+    "PII Data Detected",
+    "Unauthenticated Endpoint returning Sensitive Data"
+  ]
+}
+```
+
+### Host Filters
+
+<ParamField path="hosts" type="array" default="[]">
+  Array of hostnames to monitor. If empty, alerts from all hosts trigger the webhook.
+</ParamField>
+
+```json
+{
+  "hosts": ["api.example.com", "staging.example.com"]
+}
+```
+
+### Max Retries
+
+<ParamField path="maxRetries" type="number" default="3">
+  Number of retry attempts if the webhook endpoint fails (5xx errors).
+</ParamField>
+
+<Note>
+Retries occur with a 500ms delay between attempts. Only 5xx server errors trigger retries.
+</Note>
+
+## Webhook Payload
+
+Metlo sends a POST request with the following JSON payload:
+
+```json
+{
+  "alert": {
+    "uuid": "123e4567-e89b-12d3-a456-426614174000",
+    "type": "PII Data Detected",
+    "riskScore": "high",
+    "status": "Open",
+    "createdAt": "2024-03-15T10:30:00.000Z",
+    "description": "Email addresses detected in response body",
+    "apiEndpoint": {
+      "uuid": "api-endpoint-uuid",
+      "path": "/api/users",
+      "method": "GET",
+      "host": "api.example.com",
+      "dataFields": [
+        {
+          "dataPath": "users.*.email",
+          "dataClasses": ["Email"],
+          "dataSection": "resBody"
+        }
+      ]
+    }
+  },
+  "meta": {
+    "host": "api.example.com",
+    "totalEndpoints": 127,
+    "totalSensitiveEndpoints": 43
+  }
+}
+```
+
+### Payload Fields
+
+<ParamField path="alert.uuid" type="string">
+  Unique identifier for this alert.
+</ParamField>
+
+<ParamField path="alert.type" type="string">
+  The type of alert (see Alert Types table above).
+</ParamField>
+
+<ParamField path="alert.riskScore" type="string">
+  Risk severity: `none`, `low`, `medium`, or `high`.
+</ParamField>
+
+<ParamField path="alert.status" type="string">
+  Current alert status: `Open`, `Resolved`, or `Ignored`.
+</ParamField>
+
+<ParamField path="alert.apiEndpoint" type="object">
+  Details about the affected API endpoint, including path, method, host, and detected sensitive data fields.
+</ParamField>
+
+<ParamField path="meta" type="object">
+  Additional context including total endpoints and sensitive endpoints for the host.
+</ParamField>
+
+## Integration Examples
+
+### Slack
+
+1. Create a Slack webhook URL in your workspace
+2. Transform the Metlo payload using a middleware service (e.g., Zapier, n8n) or create a simple proxy:
+
+```javascript
+// Example Express.js proxy for Slack
+app.post('/metlo-to-slack', async (req, res) => {
+  const { alert, meta } = req.body;
+  
+  await fetch(process.env.SLACK_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: `🚨 *${alert.type}*`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*${alert.type}* on \`${alert.apiEndpoint.host}\`\n${alert.description}`
+          }
+        },
+        {
+          type: 'section',
+          fields: [
+            { type: 'mrkdwn', text: `*Endpoint:*\n${alert.apiEndpoint.method} ${alert.apiEndpoint.path}` },
+            { type: 'mrkdwn', text: `*Risk:*\n${alert.riskScore}` }
+          ]
+        }
+      ]
+    })
+  });
+  
+  res.json({ success: true });
+});
+```
+
+### PagerDuty
+
+Integrate with PagerDuty Events API v2:
+
+```javascript
+app.post('/metlo-to-pagerduty', async (req, res) => {
+  const { alert } = req.body;
+  
+  await fetch('https://events.pagerduty.com/v2/enqueue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      routing_key: process.env.PAGERDUTY_ROUTING_KEY,
+      event_action: 'trigger',
+      payload: {
+        summary: `${alert.type}: ${alert.apiEndpoint.path}`,
+        severity: alert.riskScore === 'high' ? 'critical' : 'warning',
+        source: alert.apiEndpoint.host,
+        custom_details: alert
+      }
+    })
+  });
+  
+  res.json({ success: true });
+});
+```
+
+## Managing Webhooks
+
+### List All Webhooks
+
+```bash
+curl http://localhost:8080/api/v1/webhooks
+```
+
+### Update a Webhook
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/webhook/{webhookId} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://new-endpoint.com/webhook",
+    "alertTypes": ["PII Data Detected"],
+    "hosts": ["api.example.com"]
+  }'
+```
+
+### Delete a Webhook
+
+```bash
+curl -X DELETE http://localhost:8080/api/v1/webhook/{webhookId}
+```
+
+## Webhook Execution History
+
+Metlo tracks the last 10 webhook execution attempts for each webhook. View execution history in the UI under **Settings** > **Webhooks** to troubleshoot delivery issues.
+
+Each execution record includes:
+
+- Success/failure status
+- Error message (if failed)
+- Payload that was sent
+- Timestamp
+
+## Security Considerations
+
+<Warning>
+Webhook payloads contain sensitive security information. Ensure your webhook endpoints are:
+- Secured with HTTPS
+- Protected with authentication
+- Accessible only from Metlo's IP address (if possible)
+</Warning>
+
+### Verifying Webhook Authenticity
+
+Currently, Metlo sends webhooks without signature verification. To secure your webhook endpoint:
+
+1. Use HTTPS with a valid certificate
+2. Implement authentication at your endpoint (API key, bearer token)
+3. Restrict access by IP address
+4. Validate the payload structure
+
+## Timeout and Retry Behavior
+
+- **Timeout:** 250ms per request
+- **Retry Logic:** Only on 5xx server errors
+- **Retry Delay:** 500ms between attempts
+- **Max Retries:** Configurable per webhook (default: 3)
+
+<Note>
+4xx client errors (bad request, unauthorized, etc.) do not trigger retries. Fix the endpoint configuration instead.
+</Note>
+
+## Troubleshooting
+
+### Webhook Not Triggering
+
+1. Verify alert type and host filters match expected alerts
+2. Check that alerts are being generated (view in Metlo UI)
+3. Confirm webhook URL is accessible from Metlo server
+
+### Webhook Failing
+
+1. Review execution history for error messages
+2. Test endpoint manually with sample payload
+3. Check endpoint logs for request details
+4. Verify timeout is sufficient (250ms default)
+
+### Missing Alerts
+
+1. Ensure `alertTypes` array includes the expected alert type
+2. Verify `hosts` array includes the correct hostname
+3. Leave filters empty to receive all alerts (for testing)

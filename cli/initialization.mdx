@@ -1,0 +1,98 @@
+---
+title: "Initialization"
+description: "Initialize the Metlo CLI with your backend credentials"
+---
+
+## Overview
+
+Before using most Metlo CLI commands, you need to initialize the CLI with your Metlo backend URL and API key. This configuration is stored locally and used for all subsequent commands.
+
+## Command
+
+```bash
+metlo init
+```
+
+## Options
+
+<ParamField path="-b, --backend_url" type="string">
+  The backend address for your Metlo instance (e.g., `https://metlo.example.com`)
+</ParamField>
+
+<ParamField path="-k, --api_key" type="string">
+  An API key for authenticating with your Metlo backend
+</ParamField>
+
+## Interactive Mode
+
+If you run `metlo init` without any options, the CLI will prompt you interactively for the required information:
+
+```bash
+metlo init
+```
+
+**Example prompts:**
+
+```
+? Host address of metlo backend: https://metlo.example.com
+? Enter your Metlo API Key: ********
+```
+
+## Direct Configuration
+
+You can also provide the configuration directly via command-line options:
+
+```bash
+metlo init --backend_url https://metlo.example.com --api_key metlo.abc123...
+```
+
+## Where Credentials Are Stored
+
+Credentials are stored in a local file at:
+
+```
+~/.metlo/credentials
+```
+
+This file contains:
+
+```
+METLO_HOST=https://metlo.example.com
+METLO_API_KEY=metlo.abc123...
+```
+
+## Replacing Existing Credentials
+
+If credentials already exist, the CLI will ask for confirmation before replacing them:
+
+```
+? Credentials already exist at ~/.metlo/credentials. Are you sure you want to replace them? (y/N)
+```
+
+- Select **Yes** to overwrite the existing credentials
+- Select **No** to keep the current credentials
+
+## Environment Variables
+
+You can also configure the Metlo CLI using environment variables, which take precedence over the credentials file:
+
+```bash
+export METLO_HOST=https://metlo.example.com
+export METLO_API_KEY=metlo.abc123...
+```
+
+## Validation
+
+The CLI validates that the backend URL is a valid URI. If an invalid URL is provided, you'll see an error:
+
+```
+Invalid url passed for backend host : invalid-url
+```
+
+## Next Steps
+
+Once initialized, you can start using other Metlo CLI commands:
+
+- [Generate and run tests](/cli/test)
+- [Set up traffic mirroring](/cli/traffic-mirror)
+- [Create custom templates](/cli/template)

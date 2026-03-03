@@ -1,0 +1,227 @@
+---
+title: Fastify Integration
+description: Add Metlo to your Fastify application for high-performance API security monitoring
+---
+
+Metlo's Node.js agent provides native support for Fastify through automatic hook injection.
+
+## Installation
+
+Install the Metlo package from npm:
+
+<CodeGroup>
+```bash npm
+npm install metlo
+```
+
+```bash yarn
+yarn add metlo
+```
+
+```bash pnpm
+pnpm add metlo
+```
+</CodeGroup>
+
+## Quick Start
+
+Add Metlo to your Fastify application by requiring it at the start of your main script:
+
+```javascript
+var metlo = require("metlo")
+metlo("<YOUR_METLO_API_KEY>", "<YOUR_METLO_COLLECTOR_URL>")
+
+// Then initialize Fastify as usual
+const fastify = require("fastify")({
+  logger: true
+})
+
+fastify.get("/", async (request, reply) => {
+  return { hello: "world" }
+})
+
+fastify.listen({ port: 3000 })
+```
+
+<Warning>
+The `metlo()` call must be placed **before** you require Fastify. This allows Metlo to instrument the framework and automatically add hooks.
+</Warning>
+
+## Configuration
+
+### Required Parameters
+
+<ParamField path="apiKey" type="string" required>
+  Your Metlo API key for authentication with the collector
+</ParamField>
+
+<ParamField path="collectorUrl" type="string" required>
+  The URL of your Metlo collector instance (e.g., `https://collector.metlo.com`)
+</ParamField>
+
+### Optional Configuration
+
+```javascript
+var metlo = require("metlo")
+metlo("<YOUR_METLO_API_KEY>", "<YOUR_METLO_COLLECTOR_URL>", {
+  apiHost: "https://api.example.com",
+})
+```
+
+<ParamField path="apiHost" type="string">
+  Override the host value sent in trace data. Useful when your application is behind a proxy or load balancer.
+</ParamField>
+
+## How It Works
+
+Metlo's Fastify integration uses the `onSend` hook to capture request and response data:
+
+1. **Automatic hook registration** - Adds an `onSend` hook to every Fastify instance
+2. **Captures payload** - Intercepts the response payload before it's sent
+3. **Asynchronous transmission** - Sends data to Metlo using a worker pool
+4. **Zero interference** - Returns the payload unchanged
+
+### Hook Lifecycle
+
+The `onSend` hook runs just before the response is sent to the client, allowing Metlo to capture:
+- The final response payload
+- All headers (including those set by other hooks)
+- The final status code
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers
+- Request body (parsed)
+- Source IP and port
+
+**Response:**
+- Status code
+- Headers
+- Response payload
+- Destination IP and port
+
+**Metadata:**
+- Environment (from `process.env.NODE_ENV`)
+- Source identifier: `node/fastify`
+- Timestamp
+
+## Example with Schema Validation
+
+```javascript
+var metlo = require("metlo")
+metlo(process.env.METLO_API_KEY, process.env.METLO_COLLECTOR_URL)
+
+const fastify = require("fastify")({
+  logger: true
+})
+
+const userSchema = {
+  body: {
+    type: "object",
+    required: ["name", "email"],
+    properties: {
+      name: { type: "string" },
+      email: { type: "string", format: "email" }
+    }
+  }
+}
+
+fastify.post("/api/users", { schema: userSchema }, async (request, reply) => {
+  const { name, email } = request.body
+  // Your application logic
+  return { success: true, user: { name, email } }
+})
+
+fastify.listen({ port: 3000, host: "0.0.0.0" })
+```
+
+## Example with TypeScript
+
+```typescript
+import metlo from "metlo"
+metlo(process.env.METLO_API_KEY!, process.env.METLO_COLLECTOR_URL!)
+
+import Fastify from "fastify"
+
+const fastify = Fastify({
+  logger: true
+})
+
+interface UserBody {
+  name: string
+  email: string
+}
+
+fastify.post<{ Body: UserBody }>("/api/users", async (request, reply) => {
+  const { name, email } = request.body
+  return { success: true, user: { name, email } }
+})
+
+const start = async () => {
+  try {
+    await fastify.listen({ port: 3000 })
+  } catch (err) {
+    fastify.log.error(err)
+    process.exit(1)
+  }
+}
+
+start()
+```
+
+## Performance Considerations
+
+Fastify is designed for high performance, and Metlo is optimized to maintain that:
+
+- **Non-blocking** - Data transmission happens asynchronously in a worker pool
+- **Minimal overhead** - Hook execution is lightweight
+- **Payload passthrough** - Response payload is returned unchanged
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Metlo not capturing requests">
+    Verify that:
+    - `metlo()` is called **before** requiring Fastify
+    - Your collector URL is accessible from your application
+    - Your API key is correct
+    - Check Fastify logs for any error messages
+  </Accordion>
+
+  <Accordion title="Empty request body">
+    Fastify automatically parses JSON bodies. Ensure your requests have the correct `Content-Type: application/json` header.
+  </Accordion>
+
+  <Accordion title="Hook conflicts">
+    Metlo's `onSend` hook is designed to coexist with other hooks. If you're experiencing issues, check the order of hook registration.
+  </Accordion>
+</AccordionGroup>
+
+## Requirements
+
+- Node.js >= 11.7.0
+- Fastify (any version)
+
+## Compatibility
+
+Metlo works with:
+- Fastify plugins
+- Schema validation
+- Custom serializers
+- All Fastify decorators and hooks
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Inventory" icon="list" href="/features/endpoint-discovery">
+    Explore your discovered API endpoints
+  </Card>
+  <Card title="Security Testing" icon="bug" href="/testing/overview">
+    Run automated security tests on your APIs
+  </Card>
+</CardGroup>

@@ -1,0 +1,392 @@
+---
+title: Alerts API
+description: View and manage security alerts detected by Metlo
+---
+
+The Alerts API allows you to retrieve and manage security alerts that Metlo has detected in your API traffic.
+
+## List Alerts
+
+Retrieve a list of security alerts with optional filtering.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/alerts?limit=20&offset=0' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Query Parameters
+
+<ParamField query="uuid" type="uuid">
+  Filter by specific alert UUID
+</ParamField>
+
+<ParamField query="apiEndpointUuid" type="uuid">
+  Filter by endpoint UUID
+</ParamField>
+
+<ParamField query="riskScores" type="enum[]">
+  Filter by risk scores: `HIGH`, `MEDIUM`, `LOW`, `NONE`
+</ParamField>
+
+<ParamField query="status" type="enum[]">
+  Filter by alert status: `RESOLVED`, `IGNORED`, etc.
+</ParamField>
+
+<ParamField query="alertTypes" type="enum[]">
+  Filter by alert types (e.g., `UNAUTHENTICATED_ENDPOINT`, `PII_DATA_DETECTED`, `OPEN_API_SPEC_DIFF`)
+</ParamField>
+
+<ParamField query="hosts" type="string[]">
+  Filter by hostnames
+</ParamField>
+
+<ParamField query="offset" type="number" default="0">
+  Number of results to skip for pagination
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Maximum number of results to return
+</ParamField>
+
+<ParamField query="order" type="enum" default="DESC">
+  Sort order: `ASC` or `DESC`
+</ParamField>
+
+### Response
+
+<ResponseField name="alerts" type="Alert[]">
+  Array of alert objects
+</ResponseField>
+
+```json Response Example
+[
+  {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "PII_DATA_DETECTED",
+    "riskScore": "HIGH",
+    "apiEndpointUuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    "apiEndpoint": {
+      "uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "method": "GET",
+      "host": "api.example.com",
+      "path": "/api/users/{id}",
+      "openapiSpecName": "users-api-v1"
+    },
+    "description": "Sensitive data detected in response: Email, SSN",
+    "status": "UNRESOLVED",
+    "resolutionMessage": null,
+    "context": {
+      "dataClasses": ["email", "ssn"],
+      "sections": ["RESPONSE_BODY"]
+    },
+    "createdAt": "2026-03-03T10:30:00.000Z",
+    "updatedAt": "2026-03-03T10:30:00.000Z"
+  },
+  {
+    "uuid": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "type": "UNAUTHENTICATED_ENDPOINT",
+    "riskScore": "MEDIUM",
+    "apiEndpointUuid": "8d3f2a1b-4c5e-6d7f-8a9b-0c1d2e3f4a5b",
+    "apiEndpoint": {
+      "uuid": "8d3f2a1b-4c5e-6d7f-8a9b-0c1d2e3f4a5b",
+      "method": "POST",
+      "host": "api.example.com",
+      "path": "/api/admin/users",
+      "openapiSpecName": "admin-api-v1"
+    },
+    "description": "Endpoint accessible without authentication",
+    "status": "RESOLVED",
+    "resolutionMessage": "Added authentication middleware",
+    "context": {},
+    "createdAt": "2026-03-01T14:20:00.000Z",
+    "updatedAt": "2026-03-02T09:15:00.000Z"
+  }
+]
+```
+
+## Alert Types
+
+Metlo can detect various types of security issues:
+
+<AccordionGroup>
+  <Accordion title="PII_DATA_DETECTED">
+    Personally Identifiable Information (PII) detected in API requests or responses.
+  </Accordion>
+  
+  <Accordion title="UNAUTHENTICATED_ENDPOINT">
+    Endpoint is accessible without proper authentication.
+  </Accordion>
+  
+  <Accordion title="OPEN_API_SPEC_DIFF">
+    Differences detected between actual API behavior and OpenAPI specification.
+  </Accordion>
+  
+  <Accordion title="QUERY_SENSITIVE_DATA">
+    Sensitive data being sent in query parameters (should be in body).
+  </Accordion>
+  
+  <Accordion title="PATH_SENSITIVE_DATA">
+    Sensitive data exposed in URL paths.
+  </Accordion>
+  
+  <Accordion title="BASIC_AUTHENTICATION_DETECTED">
+    Use of basic authentication (should use more secure methods).
+  </Accordion>
+  
+  <Accordion title="UNSECURED_ENDPOINT">
+    Endpoint accessible over HTTP instead of HTTPS.
+  </Accordion>
+</AccordionGroup>
+
+## Update Alert
+
+Update the status of a specific alert.
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/alert/{alertId}' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updateType": "RESOLVE",
+    "resolutionMessage": "Fixed by implementing authentication"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="alertId" type="uuid" required>
+  The unique identifier of the alert
+</ParamField>
+
+### Request Body
+
+<ParamField body="updateType" type="enum" required>
+  Type of update to apply:
+  - `RESOLVE`: Mark the alert as resolved
+  - `IGNORE`: Ignore the alert
+  - `UNRESOLVE`: Reopen a resolved alert
+</ParamField>
+
+<ParamField body="resolutionMessage" type="string">
+  Optional message describing how the issue was resolved or why it's being ignored
+</ParamField>
+
+### Response
+
+<ResponseField name="alert" type="Alert">
+  The updated alert object
+</ResponseField>
+
+```json Response Example
+{
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "UNAUTHENTICATED_ENDPOINT",
+  "riskScore": "MEDIUM",
+  "status": "RESOLVED",
+  "resolutionMessage": "Fixed by implementing authentication",
+  "updatedAt": "2026-03-03T12:00:00.000Z"
+}
+```
+
+## Update Multiple Alerts
+
+Update multiple alerts at once using filter criteria.
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/alerts' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updateType": "RESOLVE",
+    "resolutionMessage": "Bulk resolution after security review",
+    "riskScores": ["LOW"],
+    "alertTypes": ["QUERY_SENSITIVE_DATA"],
+    "hosts": ["staging.api.example.com"]
+  }'
+```
+
+### Request Body
+
+<ParamField body="updateType" type="enum" required>
+  Type of update: `RESOLVE`, `IGNORE`, or `UNRESOLVE`
+</ParamField>
+
+<ParamField body="resolutionMessage" type="string">
+  Optional resolution or ignore message
+</ParamField>
+
+<ParamField body="uuid" type="uuid">
+  Filter by specific alert UUID
+</ParamField>
+
+<ParamField body="apiEndpointUuid" type="uuid">
+  Filter by endpoint UUID
+</ParamField>
+
+<ParamField body="riskScores" type="enum[]">
+  Filter by risk scores: `HIGH`, `MEDIUM`, `LOW`, `NONE`
+</ParamField>
+
+<ParamField body="status" type="enum[]">
+  Filter by current status
+</ParamField>
+
+<ParamField body="alertTypes" type="enum[]">
+  Filter by alert types
+</ParamField>
+
+<ParamField body="hosts" type="string[]">
+  Filter by hostnames
+</ParamField>
+
+### Response
+
+```json
+null
+```
+
+Returns `null` on success with HTTP status `200`.
+
+<Note>
+  Be careful with batch updates - they will affect all alerts matching the specified filters.
+</Note>
+
+## Alert Object Structure
+
+### Alert Fields
+
+<ResponseField name="uuid" type="string">
+  Unique identifier for the alert
+</ResponseField>
+
+<ResponseField name="type" type="enum">
+  Type of security issue detected
+</ResponseField>
+
+<ResponseField name="riskScore" type="enum">
+  Severity level: `HIGH`, `MEDIUM`, `LOW`, or `NONE`
+</ResponseField>
+
+<ResponseField name="apiEndpointUuid" type="string">
+  UUID of the affected endpoint
+</ResponseField>
+
+<ResponseField name="apiEndpoint" type="object">
+  Summary information about the affected endpoint
+  <Expandable title="properties">
+    <ResponseField name="uuid" type="string">
+      Endpoint UUID
+    </ResponseField>
+    <ResponseField name="method" type="string">
+      HTTP method
+    </ResponseField>
+    <ResponseField name="host" type="string">
+      Hostname
+    </ResponseField>
+    <ResponseField name="path" type="string">
+      Endpoint path
+    </ResponseField>
+    <ResponseField name="openapiSpecName" type="string">
+      Associated OpenAPI spec name
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Human-readable description of the alert
+</ResponseField>
+
+<ResponseField name="status" type="enum">
+  Current status of the alert
+</ResponseField>
+
+<ResponseField name="resolutionMessage" type="string">
+  Message explaining resolution or why alert was ignored
+</ResponseField>
+
+<ResponseField name="context" type="object">
+  Additional context specific to the alert type
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when alert was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when alert was last updated
+</ResponseField>
+
+## Common Use Cases
+
+### Get All High-Risk Unresolved Alerts
+
+```bash
+curl 'https://<your-metlo-instance>/api/v1/alerts?riskScores=HIGH&status=UNRESOLVED' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Get Alerts for a Specific Endpoint
+
+```bash
+curl 'https://<your-metlo-instance>/api/v1/alerts?apiEndpointUuid=550e8400-e29b-41d4-a716-446655440000' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Resolve All Alerts for a Host
+
+```bash
+curl -X PUT 'https://<your-metlo-instance>/api/v1/alerts' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updateType": "RESOLVE",
+    "resolutionMessage": "Host decommissioned",
+    "hosts": ["old-api.example.com"]
+  }'
+```
+
+### Ignore Low-Priority Alerts
+
+```bash
+curl -X PUT 'https://<your-metlo-instance>/api/v1/alerts' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updateType": "IGNORE",
+    "resolutionMessage": "Accepted risk for staging environment",
+    "riskScores": ["LOW"],
+    "hosts": ["staging.api.example.com"]
+  }'
+```
+
+## Error Responses
+
+### 400 Bad Request
+
+```json
+{
+  "type": "ZOD",
+  "message": "Invalid parameters",
+  "err": {}
+}
+```
+
+Returned when query parameters or request body fail validation.
+
+### 404 Not Found
+
+```json
+"Alert does not exist."
+```
+
+Returned when the specified alert UUID is not found.
+
+## Best Practices
+
+<Card title="Alert Management Tips" icon="lightbulb">
+  - **Prioritize by Risk Score**: Focus on `HIGH` risk alerts first
+  - **Add Context**: Always include meaningful resolution messages
+  - **Regular Review**: Periodically review ignored alerts to ensure they're still acceptable
+  - **Automate Responses**: Use the API to integrate alert management into your workflows
+  - **Monitor Trends**: Track alert types over time to identify recurring issues
+</Card>

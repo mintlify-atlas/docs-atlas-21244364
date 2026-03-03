@@ -1,0 +1,210 @@
+---
+title: "Test Commands"
+description: "Generate and run API security tests with the Metlo CLI"
+---
+
+## Overview
+
+The Metlo CLI provides powerful testing capabilities to generate and execute API security tests. Tests can be generated from templates or custom scripts, and executed against your endpoints.
+
+## Generate Tests
+
+Generate a test for a specific endpoint using a template or custom test file.
+
+### Command
+
+```bash
+metlo test generate
+```
+
+### Options
+
+<ParamField path="-t, --testType" type="string" required>
+  Type of test to generate. Can be a built-in template name (e.g., `BOLA`, `SQL_INJECTION`) or a path to a custom `.js` or `.ts` test file.
+</ParamField>
+
+<ParamField path="-e, --endpoint" type="string" required>
+  The endpoint path to generate this test for (e.g., `/api/users`)
+</ParamField>
+
+<ParamField path="-p, --path" type="string">
+  Path where the generated test file should be saved. If not provided, the test will be printed to stdout.
+</ParamField>
+
+<ParamField path="-h, --host" type="string">
+  The host to generate this test for (e.g., `api.example.com`)
+</ParamField>
+
+<ParamField path="-x, --method" type="string">
+  The HTTP method of the endpoint (e.g., `GET`, `POST`, `PUT`, `DELETE`)
+</ParamField>
+
+<ParamField path="-v, --version" type="number">
+  The version of the test template to use (for built-in templates only)
+</ParamField>
+
+### Examples
+
+**Generate a BOLA test for an endpoint:**
+
+```bash
+metlo test generate -t BOLA -e /api/users/{id} -x GET -h api.example.com -p bola-test.yaml
+```
+
+**Generate a SQL injection test:**
+
+```bash
+metlo test generate -t SQL_INJECTION -e /api/search -x POST -h api.example.com
+```
+
+**Generate from a custom template:**
+
+```bash
+metlo test generate -t ./custom-test.ts -e /api/products -x GET -p test.yaml
+```
+
+### Output
+
+The command generates a YAML test file that can be executed with `metlo test run`. Example output:
+
+```
+Success! Wrote test template to "bola-test.yaml"
+```
+
+---
+
+## Run Tests
+
+Execute API security tests from YAML test files or by filtering endpoints.
+
+### Command
+
+```bash
+metlo test run [paths...]
+```
+
+### Arguments
+
+<ParamField path="paths" type="string[]">
+  Paths to one or more YAML test files. If not provided, tests will be fetched from the Metlo backend based on filter options.
+</ParamField>
+
+### Options
+
+<ParamField path="-e, --endpoint" type="string">
+  Filter tests by endpoint pattern or UUID. Only used when no paths are provided.
+</ParamField>
+
+<ParamField path="-x, --method" type="string">
+  Filter tests by HTTP method (e.g., `GET`, `POST`). Only used when no paths are provided.
+</ParamField>
+
+<ParamField path="-n, --host" type="string">
+  Filter tests by hostname. Only used when no paths are provided.
+</ParamField>
+
+<ParamField path="-v, --verbose" type="boolean">
+  Print detailed test errors and response information
+</ParamField>
+
+<ParamField path="--envfile" type="string">
+  Path to a `.env` file containing environment variables for test execution
+</ParamField>
+
+<ParamField path="--env" type="key=value">
+  Set individual environment variables (can be used multiple times). Format: `--env KEY=value`
+</ParamField>
+
+### Examples
+
+**Run a specific test file:**
+
+```bash
+metlo test run ./tests/bola-test.yaml
+```
+
+**Run multiple test files:**
+
+```bash
+metlo test run ./tests/*.yaml
+```
+
+**Run tests for a specific endpoint:**
+
+```bash
+metlo test run -e /api/users -x GET -n api.example.com
+```
+
+**Run with environment variables:**
+
+```bash
+metlo test run ./test.yaml --envfile .env.test --env API_KEY=abc123
+```
+
+**Run with verbose output:**
+
+```bash
+metlo test run ./test.yaml -v
+```
+
+### Output
+
+The command provides real-time feedback on test execution:
+
+```
+Running test at path "./test.yaml":
+✓ Done running test...
+All Tests Succeeded!
+```
+
+**On failure:**
+
+```
+Running test at path "./test.yaml":
+✓ Done running test...
+Some Tests Failed.
+Request 1 Assertion 1 Failed: Response status should be 200
+{"key": "resp.status", "action": "eq", "value": 200}
+Use the --verbose flag for more information.
+```
+
+### Request Estimate Warning
+
+If a test will make more than 300 requests, you'll be prompted for confirmation:
+
+```
+? Estimated request count is high (450). Would you like to continue? (y/N)
+```
+
+### Global Environment Variables
+
+The CLI automatically fetches global environment variables from your Metlo backend and makes them available to tests under the `global` namespace.
+
+---
+
+## Run Auth Tests
+
+Execute authentication tests for endpoints configured in your Metlo backend.
+
+### Command
+
+```bash
+metlo test run-auth-tests
+```
+
+This command fetches all endpoints configured for authentication testing from your Metlo backend and runs the appropriate tests with verbose output enabled.
+
+### Example
+
+```bash
+metlo test run-auth-tests
+```
+
+---
+
+## Test Exit Codes
+
+- **Exit code 0**: All tests passed
+- **Exit code 1**: One or more tests failed
+
+This makes it easy to integrate Metlo tests into CI/CD pipelines.

@@ -1,0 +1,228 @@
+---
+title: Sensitive Data Scanning
+description: Detect PII and sensitive data across your APIs with automatic risk scoring
+---
+
+Metlo automatically scans every API endpoint to identify sensitive data like PII, credentials, and other confidential information, then assigns risk scores to help you prioritize security efforts.
+
+## What Gets Scanned
+
+Metlo analyzes all parts of API requests and responses to detect sensitive data:
+
+<CardGroup cols={2}>
+  <Card title="Request Data" icon="arrow-right">
+    - Path parameters
+    - Query parameters
+    - Request headers
+    - Request body
+  </Card>
+  <Card title="Response Data" icon="arrow-left">
+    - Response headers
+    - Response body
+    - Multiple status codes
+    - Different content types
+  </Card>
+</CardGroup>
+
+## Supported Data Classes
+
+Metlo detects the following types of sensitive data out of the box:
+
+- **Email**: Email addresses
+- **Credit Card Number**: Payment card numbers
+- **Social Security Number**: SSN and national identifiers
+- **Phone Number**: International phone numbers
+- **IP Address**: IPv4 and IPv6 addresses
+- **Geographic Coordinates**: Latitude/longitude pairs
+- **VIN**: Vehicle identification numbers
+- **Address**: Physical addresses
+- **Date of Birth**: DOB fields
+- **Driver License Number**: DL numbers
+- **Aadhar Number**: Indian national IDs
+- **Brazil CPF**: Brazilian tax IDs
+
+<Info>
+You can extend Metlo's detection capabilities by adding custom data classes with your own regex patterns and validation rules.
+</Info>
+
+## How Scanning Works
+
+### Data Field Extraction
+
+For each API request, Metlo:
+
+1. **Parses the structure** of request/response data
+2. **Creates data field entries** for each field in the payload
+3. **Stores field metadata** including data type, path, and section
+4. **Tracks field evolution** as new values are seen over time
+
+### Pattern Matching
+
+Metlo uses multiple detection methods:
+
+- **Regex patterns**: Match field values against known sensitive data patterns
+- **Field name analysis**: Identify fields with names like `ssn`, `creditCard`, `email`
+- **Validation rules**: Confirm matches with checksums (e.g., Luhn algorithm for credit cards)
+- **Context awareness**: Consider field location and surrounding data
+
+<Tip>
+Metlo's scanner can identify sensitive data even when field names are obfuscated or use non-standard naming conventions.
+</Tip>
+
+### Risk Score Calculation
+
+Each endpoint receives a risk score based on:
+
+- **Type of sensitive data**: Credit cards are higher risk than email addresses
+- **Data location**: Path/query parameters are riskier than response bodies
+- **Volume**: Number of different sensitive fields exposed
+- **Authentication status**: Unauthenticated endpoints with PII are critical
+
+## Risk Score Levels
+
+<CardGroup cols={4}>
+  <Card title="None" icon="circle" color="#gray">
+    No sensitive data detected
+  </Card>
+  <Card title="Low" icon="circle" color="#68D391">
+    Minimal sensitive data exposure
+  </Card>
+  <Card title="Medium" icon="circle" color="#F6AD55">
+    Moderate sensitive data, requires review
+  </Card>
+  <Card title="High" icon="circle" color="#FC8181">
+    Critical PII exposure, immediate attention needed
+  </Card>
+</CardGroup>
+
+## Viewing Scan Results
+
+In the Metlo dashboard:
+
+### Endpoint Details Page
+
+1. **Data Fields Tab**: See all detected fields and their data classes
+2. **PII Chart**: Visual breakdown of sensitive data types
+3. **Field Details**: Click any field to see examples and detection metadata
+
+### Sensitive Data Summary
+
+The summary page shows:
+- Total endpoints by risk score
+- Most common data classes across your APIs
+- Endpoints with unauthenticated sensitive data access
+- Trends in sensitive data exposure over time
+
+## Alerts
+
+Metlo generates automatic alerts when sensitive data is detected:
+
+### PII Data Detected
+
+Triggered when a new data class is found on an endpoint:
+
+```
+Sensitive data of type Credit Card Number has been detected 
+in field 'payment.ccn' of Request Body.
+```
+
+### Sensitive Data in Query Params
+
+High-priority alert when PII appears in URL parameters:
+
+```
+Query Parameter 'ssn' contains sensitive data of type 
+Social Security Number.
+```
+
+<Warning>
+Sensitive data in query parameters is especially risky because it may be logged by proxies, load balancers, and appear in browser history.
+</Warning>
+
+### Sensitive Data in Path Params
+
+Triggered when path segments contain PII:
+
+```
+Path Parameter at position 3 contains sensitive data of type Email.
+```
+
+### Unauthenticated Endpoint with Sensitive Data
+
+Critical alert when endpoints without authentication return PII:
+
+```
+Unauthenticated endpoint GET /api/users/{userId} is 
+returning sensitive data.
+```
+
+## Data Redaction
+
+To protect sensitive data in stored traces:
+
+### Full Trace Capture
+
+By default, Metlo redacts request/response bodies for endpoints with sensitive data. You can:
+
+- **Enable globally**: Capture full traces for all endpoints (not recommended for production)
+- **Enable per endpoint**: Capture full traces for specific endpoints you need to debug
+
+<Info>
+Even when traces are redacted, metadata about sensitive data fields is preserved for security analysis.
+</Info>
+
+### Field-Level Blocking
+
+Use Block Fields to prevent specific data from being captured:
+
+1. Configure blocked paths like `req.body.creditCard`
+2. Metlo automatically redacts matching fields
+3. Applies to both storage and external data sharing
+
+## Best Practices
+
+<CardGroup cols={1}>
+  <Card title="Regular Audits">
+    Review high-risk endpoints monthly to ensure PII handling is appropriate
+  </Card>
+  <Card title="Minimize Exposure">
+    Avoid passing sensitive data in URLs—use request bodies with POST instead
+  </Card>
+  <Card title="Authentication Required">
+    Ensure all endpoints returning PII require proper authentication
+  </Card>
+  <Card title="Custom Data Classes">
+    Add custom patterns for business-specific sensitive data types
+  </Card>
+</CardGroup>
+
+## Custom Data Classes
+
+Extend detection for your specific needs:
+
+<Steps>
+  <Step title="Define Pattern">
+    Create a regex pattern that matches your sensitive data format
+  </Step>
+  <Step title="Add Validation">
+    Optionally add custom validation logic to reduce false positives
+  </Step>
+  <Step title="Set Severity">
+    Configure how this data class impacts risk scores
+  </Step>
+  <Step title="Test">
+    Verify detection works on sample data before deploying
+  </Step>
+</Steps>
+
+## False Positive Management
+
+If Metlo incorrectly identifies data as sensitive:
+
+1. Mark the field as a false positive in the UI
+2. The field will no longer contribute to risk scores
+3. Repeated false positives help train the detection system
+
+<Tip>
+Use ignored detections to suppress specific alerts for known safe conditions, like test environments or synthetic data.
+</Tip>

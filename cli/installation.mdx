@@ -1,0 +1,51 @@
+---
+title: "Installation"
+description: "Install and set up the Metlo CLI tool"
+---
+
+## Installation
+
+The Metlo CLI is distributed as an npm package. You can install it globally using npm:
+
+```bash
+npm install -g @metlo/cli
+```
+
+After installation, the `metlo` command will be available in your terminal.
+
+## System Requirements
+
+- **Node.js**: Version 16 or higher is required
+- **npm**: Comes bundled with Node.js
+
+We recommend using [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions.
+
+## Verifying Installation
+
+To verify that the CLI was installed successfully, run:
+
+```bash
+metlo --version
+```
+
+This should display the version of the Metlo CLI (e.g., `0.2.9`).
+
+## What's Included
+
+The Metlo CLI includes the following command groups:
+
+- `metlo init` - Initialize CLI with your Metlo backend credentials
+- `metlo test` - Generate and run API security tests
+- `metlo traffic-mirror` - Set up traffic mirroring on AWS or GCP
+- `metlo template` - Manage custom test templates
+- `metlo fuzz` - Run fuzz testing on your APIs
+
+## Next Steps
+
+After installing the CLI, you'll need to initialize it with your Metlo backend credentials:
+
+```bash
+metlo init
+```
+
+See the [Initialization](/cli/initialization) page for more details.

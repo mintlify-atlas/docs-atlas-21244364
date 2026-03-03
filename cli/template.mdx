@@ -1,0 +1,265 @@
+---
+title: "Template Commands"
+description: "Create and manage custom test templates"
+---
+
+## Overview
+
+Metlo allows you to create custom test templates using TypeScript or JavaScript. These templates can generate test configurations programmatically based on endpoint metadata.
+
+## Initialize Template Project
+
+Create a new custom template project with the required dependencies.
+
+### Command
+
+```bash
+metlo template init <path>
+```
+
+### Arguments
+
+<ParamField path="path" type="string" required>
+  Path to the project directory where the template project will be created
+</ParamField>
+
+### Examples
+
+**Create a new template project:**
+
+```bash
+metlo template init ./my-templates
+```
+
+**Output:**
+
+```
+✓ Created custom template project at "./my-templates".
+```
+
+### What Gets Created
+
+The command creates:
+
+```
+my-templates/
+├── templates/          # Directory for your template files
+├── package.json        # Node.js package configuration
+└── node_modules/       # Dependencies including @metlo/testing
+```
+
+### Requirements
+
+- **Node.js**: Version 16 or higher
+- **npm**: Installed and available in PATH
+
+If requirements are not met, you'll see an error:
+
+```
+✗ Node 16+ is required for Metlo. We recommend using nvm to install Node: https://github.com/nvm-sh/nvm
+```
+
+or
+
+```
+✗ Error: npm not installed
+```
+
+---
+
+## Push Templates
+
+Upload custom test templates to your Metlo backend.
+
+### Command
+
+```bash
+metlo template push [paths...]
+```
+
+### Arguments
+
+<ParamField path="paths" type="string[]" required>
+  Paths to template files or directories. If a directory is provided, all `.ts` and `.js` files will be uploaded recursively.
+</ParamField>
+
+### Examples
+
+**Push a single template:**
+
+```bash
+metlo template push ./templates/custom-auth-test.ts
+```
+
+**Push all templates in a directory:**
+
+```bash
+metlo template push ./templates/
+```
+
+**Push multiple specific files:**
+
+```bash
+metlo template push template1.ts template2.js
+```
+
+### Output
+
+**Success:**
+
+```
+✓ Done pushing templates.
+Saved 3 Templates.
+  • CUSTOM_AUTH - Version 1
+  • RATE_LIMIT_CHECK - Version 1
+  • DATA_VALIDATION - Version 2
+```
+
+**Already exists:**
+
+```
+✓ Done pushing templates.
+Skipped 1 Already Existing Templates.
+  • CUSTOM_AUTH - Version 1
+```
+
+**Failure:**
+
+```
+✗ Failed pushing templates
+Invalid template structure in "custom-test.ts"
+```
+
+### Large File Warning
+
+If you select more than 250 files, you'll be prompted for confirmation:
+
+```
+? Selected 312 files, are you sure this is the correct template path? (y/N)
+```
+
+---
+
+## Template File Structure
+
+Custom templates must follow a specific structure to be valid. Here's an example:
+
+### TypeScript Template Example
+
+```typescript
+import { TestBuilder, TestStepBuilder, GenTestEndpoint, TemplateConfig } from "@metlo/testing"
+
+export default {
+  name: "CUSTOM_AUTH",
+  version: 1,
+  builder: (endpoint: GenTestEndpoint, config: TemplateConfig) => {
+    return new TestBuilder()
+      .setMeta({
+        name: `Custom Auth Test - ${endpoint.path}`,
+        severity: "HIGH",
+        tags: ["authentication", "custom"],
+      })
+      .addTestStep(
+        TestStepBuilder.sampleRequest(endpoint, config)
+          .modifyRequest((req) => {
+            // Remove authorization header
+            req.headers = req.headers.filter(
+              (h) => h.name.toLowerCase() !== "authorization"
+            )
+            return req
+          })
+          .assert("resp.status == 401")
+      )
+  },
+}
+```
+
+### JavaScript Template Example
+
+```javascript
+const { TestBuilder, TestStepBuilder } = require("@metlo/testing")
+
+module.exports = {
+  name: "CUSTOM_VALIDATION",
+  version: 1,
+  builder: (endpoint, config) => {
+    return new TestBuilder()
+      .setMeta({
+        name: `Data Validation - ${endpoint.path}`,
+        severity: "MEDIUM",
+      })
+      .addTestStep(
+        TestStepBuilder.sampleRequest(endpoint, config)
+          .assert("resp.status >= 200 && resp.status < 300")
+          .assert("resp.headers['Content-Type'].includes('application/json')")
+      )
+  },
+}
+```
+
+### Required Fields
+
+Every template must export a default object with:
+
+<ParamField path="name" type="string" required>
+  Unique name for the template (typically UPPERCASE_SNAKE_CASE)
+</ParamField>
+
+<ParamField path="version" type="number" required>
+  Version number of the template (increment when making changes)
+</ParamField>
+
+<ParamField path="builder" type="function" required>
+  Function that receives `endpoint` and `config` parameters and returns a test configuration using `TestBuilder`
+</ParamField>
+
+---
+
+## Using Custom Templates
+
+Once pushed, custom templates can be used with the `metlo test generate` command:
+
+```bash
+metlo test generate -t CUSTOM_AUTH -e /api/users -x GET -p test.yaml
+```
+
+Or reference them directly by file path:
+
+```bash
+metlo test generate -t ./templates/custom-auth-test.ts -e /api/users -x GET -p test.yaml
+```
+
+---
+
+## Template Validation
+
+Before pushing, the CLI validates each template to ensure:
+
+- The file exports a default object
+- The object has `name`, `version`, and `builder` properties
+- The `builder` is a function
+- The template can be executed without errors
+
+Invalid templates will be skipped with an error message:
+
+```
+Unable to load file "broken-template.ts": Template must export default object with name, version, and builder
+```
+
+---
+
+## Template Versioning
+
+When you modify a template, increment the version number. The Metlo backend stores all versions:
+
+- Version 1: Initial implementation
+- Version 2: Added additional assertions
+- Version 3: Improved error handling
+
+You can specify which version to use when generating tests:
+
+```bash
+metlo test generate -t CUSTOM_AUTH -v 2 -e /api/users -x GET
+```
+
+If no version is specified, the latest version is used.

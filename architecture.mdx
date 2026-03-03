@@ -1,0 +1,450 @@
+---
+title: Architecture Overview
+description: Understand Metlo's system architecture and how its components work together to provide comprehensive API security
+---
+
+# System Architecture
+
+Metlo is built with a microservices architecture designed for scalability, reliability, and real-time API security monitoring. This page explains how the different components work together.
+
+## Architecture Diagram
+
+```
+┌─────────────────┐
+│   Your API      │
+│  Application    │
+└────────┬────────┘
+         │ Traffic
+         ▼
+┌─────────────────┐      ┌──────────────┐
+│ Metlo Ingestor  │◄────►│   Redis      │
+│   (port 8081)   │      │   Cache      │
+└────────┬────────┘      └──────────────┘
+         │
+         ▼
+┌─────────────────┐      ┌──────────────┐
+│   PostgreSQL    │◄────►│   Metlo      │
+│    Database     │      │   Backend    │
+└─────────────────┘      │  (port 8080) │
+         ▲               └──────┬───────┘
+         │                      │
+         │                      ▼
+    ┌────┴────────┐      ┌──────────────┐
+    │   Analyzer  │      │   Frontend   │
+    │   Worker    │      │  (port 8000) │
+    └─────────────┘      └──────────────┘
+         ▲
+         │
+    ┌────┴────────┐
+    │    Jobs     │
+    │   Runner    │
+    └─────────────┘
+```
+
+## Core Components
+
+### 1. Ingestor
+
+<Card title="Metlo Ingestor" icon="download">
+Receives and processes API traffic from your applications in real time.
+</Card>
+
+**Port**: 8081  
+**Image**: `metlo/backend:latest`  
+**Command**: `yarn start-collector`
+
+The ingestor is the entry point for all API traffic data. It:
+
+- Receives HTTP request/response data from Metlo agents in your applications
+- Validates and normalizes incoming traffic data
+- Performs initial processing and enrichment
+- Stores raw traffic data in PostgreSQL
+- Queues jobs for the analyzer via Redis
+
+**Key Features**:
+- High-throughput traffic ingestion
+- Minimal latency impact on your APIs
+- Automatic batching and buffering
+- Handles traffic spikes gracefully
+
+**Configuration**:
+```yaml
+# docker-compose.yaml
+ingestor:
+  image: metlo/backend:latest
+  command: yarn start-collector
+  ports:
+    - 8081:8081
+  environment:
+    - DB_URL=postgres://postgres:postgres@db:5432/metlo_api_security
+    - REDIS_URL=redis://:eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81@cache:6379
+    - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    - RUN_MIGRATION=true
+```
+
+<Info>
+The ingestor runs database migrations on startup when `RUN_MIGRATION=true` is set.
+</Info>
+
+### 2. Backend API
+
+<Card title="Metlo Backend" icon="server">
+Provides the REST API for the frontend dashboard and manages core business logic.
+</Card>
+
+**Port**: 8080  
+**Image**: `metlo/backend:latest`  
+**Technology**: Node.js, Express, TypeORM
+
+The backend service handles:
+
+- User authentication and session management
+- API endpoint inventory management
+- Attack detection rule configuration
+- Security test execution
+- Alert and notification management
+- Data aggregation and analytics
+
+**Key Capabilities**:
+- RESTful API for dashboard
+- User and role management (Enterprise)
+- Attack blocking rules
+- Security testing framework
+- Integration with CI/CD systems
+
+**Technology Stack**:
+```json
+{
+  "runtime": "Node.js",
+  "framework": "Express.js",
+  "orm": "TypeORM",
+  "session": "express-session with Redis",
+  "validation": "OpenAPI validators",
+  "testing": "@metlo/testing framework"
+}
+```
+
+### 3. Frontend Dashboard
+
+<Card title="Metlo Frontend" icon="display">
+Web-based UI for visualizing API security, managing endpoints, and configuring protection.
+</Card>
+
+**Port**: 8000 (mapped from container port 3000)  
+**Image**: `metlo/frontend:latest`  
+**Technology**: Next.js, React, Chakra UI
+
+The frontend provides:
+
+- **API Inventory Dashboard** - Complete view of all discovered endpoints
+- **Attack Monitoring** - Real-time view of detected attacks and threats
+- **Sensitive Data View** - Identifies endpoints handling PII and sensitive data
+- **Security Testing** - Build and run security tests
+- **Analytics** - Traffic patterns, risk scores, and trends
+- **Configuration** - Manage detection rules and blocking policies
+
+**Technology Stack**:
+```json
+{
+  "framework": "Next.js 13",
+  "ui": "Chakra UI",
+  "charts": "Chart.js",
+  "workflow": "React Flow",
+  "editor": "Monaco Editor",
+  "data": "React Data Table Component"
+}
+```
+
+### 4. Analyzer
+
+<Card title="Metlo Analyzer" icon="magnifying-glass">
+Processes API traffic to detect attacks, identify patterns, and classify threats.
+</Card>
+
+**Image**: `metlo/jobrunner:latest`  
+**Command**: `yarn start-analyzer`
+
+The analyzer is a worker pool that:
+
+- Analyzes API traffic for attack patterns
+- Detects SQL injection, XSS, BOLA, and other OWASP Top 10 vulnerabilities
+- Identifies sensitive data (PII, credentials, tokens)
+- Builds behavioral models of normal API usage
+- Generates attack signatures for blocking
+- Updates risk scores for endpoints
+
+**Detection Capabilities**:
+- SQL Injection attempts
+- Cross-Site Scripting (XSS)
+- Broken Object Level Authorization (BOLA)
+- Broken Authentication
+- Security misconfiguration
+- Sensitive data exposure
+- XML External Entities (XXE)
+- Server-Side Request Forgery (SSRF)
+
+**Configuration**:
+```yaml
+analyzer:
+  image: metlo/jobrunner:latest
+  command: yarn start-analyzer
+  environment:
+    - DB_URL=postgres://postgres:postgres@db:5432/metlo_api_security
+    - REDIS_URL=redis://:eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81@cache:6379
+    - NUM_WORKERS=${NUM_WORKERS}
+    - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+```
+
+<Tip>
+Scale the analyzer by increasing `NUM_WORKERS` for high-traffic environments.
+</Tip>
+
+### 5. Jobs Runner
+
+<Card title="Metlo Jobs" icon="gears">
+Executes scheduled tasks and background jobs for maintenance and optimization.
+</Card>
+
+**Image**: `metlo/jobrunner:latest`
+
+The jobs runner handles:
+
+- **Scheduled Tasks** - Periodic cleanup and maintenance
+- **Endpoint Aggregation** - Consolidates similar endpoints
+- **Alert Generation** - Creates notifications for detected issues
+- **Data Retention** - Manages data lifecycle policies
+- **Report Generation** - Compiles security reports
+- **Integration Syncs** - Updates external systems
+
+**Job Types**:
+- Traffic aggregation and rollups
+- Alert rule evaluation
+- Data retention cleanup
+- Security test scheduling
+- Metrics calculation
+
+### 6. Database (PostgreSQL)
+
+<Card title="PostgreSQL" icon="database">
+Primary data store for API endpoints, traffic logs, attacks, and configuration.
+</Card>
+
+**Image**: `postgres:14.4-alpine`  
+**Port**: 5432 (internal only)
+
+**Stores**:
+- API endpoint metadata and specifications
+- Raw and processed traffic logs
+- Detected attacks and alerts
+- User accounts and sessions
+- Security test definitions and results
+- Configuration and rules
+
+**Initialization**:
+```sql
+-- init.sql
+CREATE DATABASE metlo_api_security;
+```
+
+<Warning>
+In production, use a managed PostgreSQL service (AWS RDS, Google Cloud SQL, Azure Database) for better reliability and automated backups.
+</Warning>
+
+### 7. Cache (Redis)
+
+<Card title="Redis Cache" icon="bolt">
+High-performance cache for session data, job queues, and real-time state.
+</Card>
+
+**Image**: `redis:7.0.4`  
+**Port**: 6379 (internal only)
+
+**Used For**:
+- Session storage (via `connect-typeorm`)
+- Job queue management (via `bull`)
+- Real-time attack state
+- Rate limiting data
+- Temporary aggregations
+- Cache for frequently accessed data
+
+## Data Flow
+
+### Traffic Ingestion Flow
+
+<Steps>
+  <Step title="Application Sends Traffic">
+    Your application's Metlo agent captures HTTP request/response data and sends it to the ingestor.
+
+    ```javascript
+    // Metlo agent in your app
+    app.use(MetloSDK({ host: "http://ingestor:8081" }));
+    ```
+  </Step>
+
+  <Step title="Ingestor Processes">
+    The ingestor validates, normalizes, and stores the traffic data in PostgreSQL, then queues analysis jobs in Redis.
+  </Step>
+
+  <Step title="Analyzer Detects Threats">
+    The analyzer workers pick up jobs from Redis, analyze traffic for attack patterns, and update the database with findings.
+  </Step>
+
+  <Step title="Dashboard Displays">
+    The frontend queries the backend API, which retrieves data from PostgreSQL to display in the dashboard.
+  </Step>
+</Steps>
+
+### Attack Detection Flow
+
+```
+1. Traffic arrives at Ingestor
+   ↓
+2. Stored in PostgreSQL
+   ↓
+3. Analysis job queued in Redis
+   ↓
+4. Analyzer picks up job
+   ↓
+5. Pattern matching against attack signatures
+   ↓
+6. If attack detected:
+   - Store attack details in DB
+   - Generate alert
+   - Update endpoint risk score
+   - Create blocking rule (if enabled)
+   ↓
+7. Frontend displays attack in dashboard
+```
+
+## Deployment Architecture
+
+### Local Development
+
+Use `docker-compose.yaml` for local development:
+
+```bash
+docker-compose up -d
+```
+
+All components run on a single machine with minimal resource requirements.
+
+### Production Deployment
+
+For production, deploy components separately:
+
+<CardGroup cols={2}>
+  <Card title="AWS Deployment" icon="aws">
+    - ECS/EKS for containers
+    - RDS for PostgreSQL
+    - ElastiCache for Redis
+    - ALB for load balancing
+  </Card>
+  
+  <Card title="GCP Deployment" icon="google">
+    - GKE for containers
+    - Cloud SQL for PostgreSQL
+    - Memorystore for Redis
+    - Cloud Load Balancing
+  </Card>
+  
+  <Card title="Azure Deployment" icon="microsoft">
+    - AKS for containers
+    - Azure Database for PostgreSQL
+    - Azure Cache for Redis
+    - Azure Load Balancer
+  </Card>
+  
+  <Card title="Kubernetes" icon="dharmachakra">
+    - Use Helm charts
+    - StatefulSets for stateful components
+    - Services for networking
+    - Ingress for external access
+  </Card>
+</CardGroup>
+
+## Scaling Considerations
+
+### Horizontal Scaling
+
+**Components that scale horizontally**:
+
+- **Ingestor**: Add more instances behind a load balancer for high traffic
+- **Backend**: Scale API servers for more dashboard users
+- **Analyzer**: Increase worker count or add more analyzer instances
+- **Jobs**: Run multiple job runners for parallel task execution
+
+**Stateful components**:
+- **PostgreSQL**: Use read replicas or sharding for large datasets
+- **Redis**: Use Redis Cluster for high availability
+
+### Resource Requirements
+
+**Minimum (Development)**:
+- 2 CPU cores
+- 4GB RAM
+- 20GB disk
+
+**Recommended (Production)**:
+- Ingestor: 2 CPU, 4GB RAM per instance
+- Backend: 2 CPU, 4GB RAM per instance
+- Analyzer: 4 CPU, 8GB RAM per instance
+- Jobs: 2 CPU, 4GB RAM
+- PostgreSQL: 4 CPU, 16GB RAM, 100GB SSD
+- Redis: 2 CPU, 4GB RAM
+
+## Security
+
+### Encryption
+
+<Note>
+All sensitive data is encrypted using the `ENCRYPTION_KEY` environment variable.
+</Note>
+
+Metlo encrypts:
+- API keys and credentials
+- Sensitive data detected in traffic
+- User session data
+- Integration tokens
+
+### Authentication
+
+The backend uses:
+- Session-based authentication with `express-session`
+- Sessions stored in Redis with encryption
+- CSRF protection
+- Role-based access control (Enterprise)
+
+### Network Security
+
+Best practices:
+- Run components in a private network
+- Only expose frontend and ingestor ports
+- Use TLS/SSL for all external connections
+- Implement network policies in Kubernetes
+
+## Monitoring
+
+Monitor these key metrics:
+
+- **Ingestor**: Requests per second, ingestion latency
+- **Analyzer**: Queue depth, processing time, detection rate
+- **Database**: Connection pool usage, query performance
+- **Redis**: Memory usage, eviction rate
+- **System**: CPU, memory, disk I/O
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy to AWS" icon="aws">
+    Step-by-step guide for AWS deployment
+  </Card>
+  <Card title="Deploy to GCP" icon="google">
+    Step-by-step guide for GCP deployment
+  </Card>
+  <Card title="Configure Ingestors" icon="plug">
+    Set up agents in your applications
+  </Card>
+  <Card title="Development Guide" icon="code">
+    Contribute to Metlo or customize for your needs
+  </Card>
+</CardGroup>

@@ -1,0 +1,350 @@
+---
+title: Data Classes API
+description: Access information about sensitive data classifications detected by Metlo
+---
+
+The Data Classes API provides access to information about sensitive data classifications that Metlo uses to identify and categorize data in your API traffic.
+
+## Get Data Class Information
+
+Retrieve a list of all data classes configured in Metlo.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/data-class' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Response
+
+<ResponseField name="dataClasses" type="DataClass[]">
+  Array of data class objects
+</ResponseField>
+
+```json Response Example
+[
+  {
+    "className": "email",
+    "severity": "MEDIUM",
+    "shortName": "Email Address"
+  },
+  {
+    "className": "ssn",
+    "severity": "HIGH",
+    "shortName": "Social Security Number"
+  },
+  {
+    "className": "credit_card",
+    "severity": "HIGH",
+    "shortName": "Credit Card"
+  },
+  {
+    "className": "phone_number",
+    "severity": "MEDIUM",
+    "shortName": "Phone Number"
+  },
+  {
+    "className": "ip_address",
+    "severity": "LOW",
+    "shortName": "IP Address"
+  },
+  {
+    "className": "driver_license",
+    "severity": "HIGH",
+    "shortName": "Driver's License"
+  },
+  {
+    "className": "dob",
+    "severity": "MEDIUM",
+    "shortName": "Date of Birth"
+  },
+  {
+    "className": "address",
+    "severity": "MEDIUM",
+    "shortName": "Physical Address"
+  },
+  {
+    "className": "api_key",
+    "severity": "HIGH",
+    "shortName": "API Key"
+  },
+  {
+    "className": "authentication_token",
+    "severity": "HIGH",
+    "shortName": "Auth Token"
+  }
+]
+```
+
+## Data Class Object Structure
+
+<ResponseField name="className" type="string">
+  Machine-readable identifier for the data class (e.g., `email`, `ssn`, `credit_card`)
+</ResponseField>
+
+<ResponseField name="severity" type="enum">
+  Risk level associated with this data type:
+  - `HIGH`: Critical sensitive data (SSN, credit cards, API keys)
+  - `MEDIUM`: Moderately sensitive data (emails, phone numbers)
+  - `LOW`: Less sensitive data (IP addresses, generic identifiers)
+  - `NONE`: Non-sensitive data
+</ResponseField>
+
+<ResponseField name="shortName" type="string">
+  Human-readable name for display purposes
+</ResponseField>
+
+## Common Data Classes
+
+Metlo includes built-in detection for common sensitive data types:
+
+### High Severity
+
+<CardGroup cols={2}>
+  <Card title="Social Security Numbers" icon="id-card">
+    US SSNs in various formats
+  </Card>
+  <Card title="Credit Card Numbers" icon="credit-card">
+    Major credit card formats (Visa, MasterCard, Amex, etc.)
+  </Card>
+  <Card title="API Keys" icon="key">
+    Common API key patterns from various services
+  </Card>
+  <Card title="Authentication Tokens" icon="lock">
+    JWT tokens, OAuth tokens, session tokens
+  </Card>
+  <Card title="Driver's License" icon="id-card-clip">
+    Driver's license numbers
+  </Card>
+  <Card title="Passport Numbers" icon="passport">
+    International passport numbers
+  </Card>
+</CardGroup>
+
+### Medium Severity
+
+<CardGroup cols={2}>
+  <Card title="Email Addresses" icon="envelope">
+    Email addresses in standard format
+  </Card>
+  <Card title="Phone Numbers" icon="phone">
+    Phone numbers in various international formats
+  </Card>
+  <Card title="Date of Birth" icon="cake-candles">
+    Birth dates in various formats
+  </Card>
+  <Card title="Physical Addresses" icon="location-dot">
+    Street addresses and mailing addresses
+  </Card>
+</CardGroup>
+
+### Low Severity
+
+<CardGroup cols={2}>
+  <Card title="IP Addresses" icon="network-wired">
+    IPv4 and IPv6 addresses
+  </Card>
+  <Card title="MAC Addresses" icon="computer">
+    Network hardware addresses
+  </Card>
+  <Card title="User IDs" icon="user">
+    Generic user identifiers
+  </Card>
+</CardGroup>
+
+## Data Field Management
+
+While the Data Classes API provides information about data types, the Endpoints API includes operations for managing data fields on specific endpoints.
+
+### Update Data Field Classes
+
+Modify the data classes assigned to a specific data field:
+
+```bash cURL
+curl -X POST 'https://<your-metlo-instance>/api/v1/data-field/{dataFieldId}/update-classes' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dataClasses": ["email", "phone_number"],
+    "dataSection": "RESPONSE_BODY",
+    "dataPath": "user.contact"
+  }'
+```
+
+#### Request Body
+
+<ParamField body="dataClasses" type="string[]" required>
+  Array of data class identifiers to assign
+</ParamField>
+
+<ParamField body="dataSection" type="enum" required>
+  Where the data appears:
+  - `REQUEST_QUERY`: URL query parameters
+  - `REQUEST_HEADER`: Request headers
+  - `REQUEST_BODY`: Request body
+  - `RESPONSE_HEADER`: Response headers
+  - `RESPONSE_BODY`: Response body
+</ParamField>
+
+<ParamField body="dataPath" type="string" required>
+  JSON path to the data field (e.g., `user.email`, `items[0].name`)
+</ParamField>
+
+### Delete Data Field
+
+Remove a data field classification:
+
+```bash cURL
+curl -X DELETE 'https://<your-metlo-instance>/api/v1/data-field/{dataFieldId}' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Update Data Field Entity
+
+Assign an entity/owner to a data field:
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/data-field/{dataFieldId}/update-entity' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{"entity": "user-service"}'
+```
+
+### Update Data Field Path
+
+Update the path for a data field:
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/data-field/{dataFieldId}/update-data-path' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{"dataPath": "user.profile.email"}'
+```
+
+### Clear All Sensitive Data
+
+Remove all sensitive data classifications (use with caution):
+
+```bash cURL
+curl -X POST 'https://<your-metlo-instance>/api/v1/clear-sensitive-data' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+<Warning>
+  This operation will clear all sensitive data classifications across all endpoints. This action cannot be undone.
+</Warning>
+
+### Bulk Delete Data Fields
+
+Delete multiple data fields at once:
+
+```bash cURL
+curl -X POST 'https://<your-metlo-instance>/api/v1/clear-all-datafields' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+## Use Cases
+
+### Audit Sensitive Data Classifications
+
+Retrieve all data classes to understand what types of sensitive data Metlo can detect:
+
+```bash
+curl 'https://<your-metlo-instance>/api/v1/data-class' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' | jq '.'
+```
+
+### Filter by Severity
+
+Get only high-severity data classes:
+
+```bash
+curl 'https://<your-metlo-instance>/api/v1/data-class' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  | jq '[.[] | select(.severity == "HIGH")]'
+```
+
+### Check for Specific Data Types
+
+Verify if a specific data type is being detected:
+
+```bash
+curl 'https://<your-metlo-instance>/api/v1/data-class' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  | jq '.[] | select(.className == "credit_card")'
+```
+
+## Data Sections
+
+Data can be detected in various sections of API traffic:
+
+| Section | Description |
+|---------|-------------|
+| `REQUEST_QUERY` | URL query parameters |
+| `REQUEST_HEADER` | HTTP request headers |
+| `REQUEST_BODY` | Request payload |
+| `RESPONSE_HEADER` | HTTP response headers |
+| `RESPONSE_BODY` | Response payload |
+
+<Note>
+  For GraphQL endpoints, Metlo also analyzes `REQUEST_BODY`, `REQUEST_QUERY`, and `RESPONSE_BODY` sections for GraphQL-specific data patterns.
+</Note>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Review Default Classifications">
+    Periodically review the data classes to ensure they align with your organization's data sensitivity policies.
+  </Accordion>
+  
+  <Accordion title="Customize for Your Domain">
+    While Metlo provides many built-in data classes, you may want to define custom classifications specific to your industry or business.
+  </Accordion>
+  
+  <Accordion title="Monitor High-Severity Data">
+    Pay special attention to endpoints handling HIGH severity data classes like credit cards and SSNs.
+  </Accordion>
+  
+  <Accordion title="Regular Audits">
+    Regularly audit where sensitive data appears in your API traffic and ensure it's properly protected.
+  </Accordion>
+</AccordionGroup>
+
+## Integration Examples
+
+### Python: Get All High-Risk Data Types
+
+```python
+import requests
+
+response = requests.get(
+    'https://<your-metlo-instance>/api/v1/data-class',
+    headers={'Authorization': 'metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}
+)
+
+data_classes = response.json()
+high_risk = [dc for dc in data_classes if dc['severity'] == 'HIGH']
+
+print(f"Found {len(high_risk)} high-risk data types:")
+for dc in high_risk:
+    print(f"  - {dc['shortName']} ({dc['className']})")
+```
+
+### JavaScript: Check for Specific Data Class
+
+```javascript
+const response = await fetch(
+  'https://<your-metlo-instance>/api/v1/data-class',
+  {
+    headers: {
+      'Authorization': 'metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+    }
+  }
+);
+
+const dataClasses = await response.json();
+const hasEmailDetection = dataClasses.some(dc => dc.className === 'email');
+
+if (hasEmailDetection) {
+  console.log('Email detection is enabled');
+}
+```

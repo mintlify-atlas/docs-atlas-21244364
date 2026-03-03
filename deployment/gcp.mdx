@@ -1,0 +1,414 @@
+---
+title: "GCP Deployment"
+description: "Deploy Metlo API Security on Google Cloud Platform"
+---
+
+## Overview
+
+Deploy Metlo on Google Cloud Platform (GCP) using Compute Engine instances. This guide covers setting up Metlo in your GCP project with packet mirroring for traffic analysis.
+
+## Prerequisites
+
+- GCP project with billing enabled
+- gcloud CLI installed and configured
+- Compute Engine API enabled
+- VPC network configured
+- Appropriate IAM permissions
+
+## Supported Regions
+
+Metlo can be deployed in any GCP region. Commonly used regions include:
+
+<Tabs>
+  <Tab title="Americas">
+    - us-east1 (South Carolina)
+    - us-east4 (Virginia)
+    - us-central1 (Iowa)
+    - us-west1 (Oregon)
+    - us-west2 (Los Angeles)
+    - us-west3 (Salt Lake City)
+    - us-west4 (Las Vegas)
+    - northamerica-northeast1 (Montreal)
+    - northamerica-northeast2 (Toronto)
+    - southamerica-east1 (São Paulo)
+    - southamerica-west1 (Santiago)
+  </Tab>
+
+  <Tab title="Europe">
+    - europe-west1 (Belgium)
+    - europe-west2 (London)
+    - europe-west3 (Frankfurt)
+    - europe-west4 (Netherlands)
+    - europe-west6 (Zurich)
+    - europe-west8 (Milan)
+    - europe-west9 (Paris)
+    - europe-north1 (Finland)
+    - europe-central2 (Warsaw)
+    - europe-southwest1 (Madrid)
+  </Tab>
+
+  <Tab title="Asia Pacific">
+    - asia-east1 (Taiwan)
+    - asia-east2 (Hong Kong)
+    - asia-northeast1 (Tokyo)
+    - asia-northeast2 (Osaka)
+    - asia-northeast3 (Seoul)
+    - asia-south1 (Mumbai)
+    - asia-south2 (Delhi)
+    - asia-southeast1 (Singapore)
+    - asia-southeast2 (Jakarta)
+    - australia-southeast1 (Sydney)
+    - australia-southeast2 (Melbourne)
+  </Tab>
+
+  <Tab title="Middle East">
+    - me-west1 (Tel Aviv)
+  </Tab>
+</Tabs>
+
+## Deployment Steps
+
+<Steps>
+  <Step title="Set up environment variables">
+    Configure your GCP project and region:
+
+    ```bash
+    export PROJECT_ID="your-gcp-project-id"
+    export REGION="us-central1"
+    export ZONE="us-central1-a"
+    export INSTANCE_NAME="metlo-manager"
+    
+    gcloud config set project $PROJECT_ID
+    gcloud config set compute/region $REGION
+    gcloud config set compute/zone $ZONE
+    ```
+  </Step>
+
+  <Step title="Create firewall rules">
+    Create firewall rules to allow Metlo traffic:
+
+    ```bash
+    # Allow SSH access
+    gcloud compute firewall-rules create metlo-ssh \
+      --allow tcp:22 \
+      --source-ranges 0.0.0.0/0 \
+      --description "Allow SSH to Metlo instances"
+
+    # Allow Metlo UI access
+    gcloud compute firewall-rules create metlo-ui \
+      --allow tcp:8000 \
+      --source-ranges 0.0.0.0/0 \
+      --description "Allow Metlo UI access"
+
+    # Allow Metlo collector
+    gcloud compute firewall-rules create metlo-collector \
+      --allow tcp:8081 \
+      --source-ranges 0.0.0.0/0 \
+      --description "Allow Metlo collector access"
+
+    # Allow backend API
+    gcloud compute firewall-rules create metlo-backend \
+      --allow tcp:8080 \
+      --source-ranges 0.0.0.0/0 \
+      --description "Allow Metlo backend API access"
+    ```
+
+    <Warning>
+      For production deployments, restrict source ranges to your specific IP addresses or VPC networks instead of 0.0.0.0/0.
+    </Warning>
+  </Step>
+
+  <Step title="Create the Compute Engine instance">
+    Launch a Compute Engine instance with Ubuntu:
+
+    ```bash
+    gcloud compute instances create $INSTANCE_NAME \
+      --zone=$ZONE \
+      --machine-type=n1-standard-2 \
+      --image-family=ubuntu-2004-lts \
+      --image-project=ubuntu-os-cloud \
+      --boot-disk-size=50GB \
+      --boot-disk-type=pd-standard \
+      --tags=metlo-manager \
+      --metadata=startup-script='#!/bin/bash
+        # Install Docker
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        
+        # Install Docker Compose
+        curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        
+        # Download Metlo deployment script
+        mkdir -p /opt/metlo
+        wget https://raw.githubusercontent.com/metlo-labs/metlo/master/manage-deployment.py -O /opt/metlo/manage-deployment.py
+        chmod +x /opt/metlo/manage-deployment.py
+        ln -s /opt/metlo/manage-deployment.py /usr/bin/metlo-deploy
+        
+        # Initialize and start Metlo
+        export METLO_DIR=/opt/metlo
+        metlo-deploy init -q
+        metlo-deploy start'
+    ```
+  </Step>
+
+  <Step title="Wait for initialization">
+    The instance will take approximately 10-15 minutes to fully initialize and start all Metlo services.
+
+    Monitor the startup script progress:
+    ```bash
+    gcloud compute instances get-serial-port-output $INSTANCE_NAME --zone=$ZONE
+    ```
+  </Step>
+
+  <Step title="Get instance IP and access Metlo">
+    Retrieve the external IP address:
+
+    ```bash
+    EXTERNAL_IP=$(gcloud compute instances describe $INSTANCE_NAME \
+      --zone=$ZONE \
+      --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+    
+    echo "Metlo UI: http://$EXTERNAL_IP:8000"
+    echo "Metlo Backend: http://$EXTERNAL_IP:8080"
+    echo "Metlo Collector: http://$EXTERNAL_IP:8081"
+    ```
+  </Step>
+</Steps>
+
+## Instance Specifications
+
+### Recommended Machine Types
+
+<ParamField path="Development/Testing" type="string" default="e2-medium">
+  2 vCPUs, 4 GB RAM - Suitable for testing and small deployments
+</ParamField>
+
+<ParamField path="Production (Small)" type="string" default="n1-standard-2">
+  2 vCPUs, 7.5 GB RAM - Good for small to medium production workloads
+</ParamField>
+
+<ParamField path="Production (Medium)" type="string" default="n1-standard-4">
+  4 vCPUs, 15 GB RAM - Recommended for medium to large production workloads
+</ParamField>
+
+<ParamField path="Production (Large)" type="string" default="n1-standard-8">
+  8 vCPUs, 30 GB RAM - For high-traffic production environments
+</ParamField>
+
+### Storage Requirements
+
+- **Minimum**: 20GB boot disk
+- **Recommended**: 50GB or more depending on API traffic volume
+- **Disk Type**: SSD persistent disks (pd-ssd) for better performance, or standard persistent disks (pd-standard) for cost savings
+
+## Packet Mirroring Configuration
+
+To capture VPC traffic using GCP Packet Mirroring:
+
+<Steps>
+  <Step title="Create a packet mirroring ingestor instance">
+    ```bash
+    gcloud compute instances create metlo-ingestor \
+      --zone=$ZONE \
+      --machine-type=e2-small \
+      --image-family=ubuntu-2004-lts \
+      --image-project=ubuntu-os-cloud \
+      --boot-disk-size=20GB \
+      --can-ip-forward \
+      --tags=metlo-ingestor
+    ```
+  </Step>
+
+  <Step title="Configure firewall for packet mirroring">
+    ```bash
+    # Allow packet mirroring traffic (encapsulated in GRE)
+    gcloud compute firewall-rules create allow-packet-mirroring \
+      --allow all \
+      --source-ranges 0.0.0.0/0 \
+      --target-tags metlo-ingestor
+    ```
+  </Step>
+
+  <Step title="Set up packet mirroring policy">
+    Create a packet mirroring policy to send traffic to the ingestor:
+
+    ```bash
+    # Create an instance group for the collector
+    gcloud compute instance-groups unmanaged create metlo-ingestor-group \
+      --zone=$ZONE
+    
+    gcloud compute instance-groups unmanaged add-instances metlo-ingestor-group \
+      --instances=metlo-ingestor \
+      --zone=$ZONE
+    
+    # Create health check
+    gcloud compute health-checks create tcp metlo-health-check \
+      --port=8081
+    
+    # Create backend service
+    gcloud compute backend-services create metlo-backend-service \
+      --protocol=TCP \
+      --health-checks=metlo-health-check \
+      --region=$REGION
+    
+    # Add instance group to backend service
+    gcloud compute backend-services add-backend metlo-backend-service \
+      --instance-group=metlo-ingestor-group \
+      --instance-group-zone=$ZONE \
+      --region=$REGION
+    ```
+  </Step>
+
+  <Step title="Create packet mirroring policy">
+    ```bash
+    gcloud compute packet-mirrorings create metlo-mirror \
+      --region=$REGION \
+      --collector-ilb=metlo-backend-service \
+      --network=default \
+      --mirrored-subnets=default
+    ```
+  </Step>
+</Steps>
+
+## Using Cloud NAT (Optional)
+
+For instances without external IPs, configure Cloud NAT:
+
+```bash
+# Create Cloud Router
+gcloud compute routers create metlo-router \
+  --network=default \
+  --region=$REGION
+
+# Configure Cloud NAT
+gcloud compute routers nats create metlo-nat \
+  --router=metlo-router \
+  --region=$REGION \
+  --auto-allocate-nat-external-ips \
+  --nat-all-subnet-ip-ranges
+```
+
+## SSH Access
+
+Connect to your instance:
+
+```bash
+gcloud compute ssh $INSTANCE_NAME --zone=$ZONE
+```
+
+Or use IAP tunneling for instances without external IPs:
+
+```bash
+gcloud compute ssh $INSTANCE_NAME --zone=$ZONE --tunnel-through-iap
+```
+
+## Management and Monitoring
+
+### Check Metlo Status
+
+```bash
+gcloud compute ssh $INSTANCE_NAME --zone=$ZONE --command="sudo metlo-deploy status"
+```
+
+### View Logs
+
+```bash
+gcloud compute ssh $INSTANCE_NAME --zone=$ZONE --command="cd /opt/metlo && sudo docker-compose logs -f"
+```
+
+### Restart Services
+
+```bash
+gcloud compute ssh $INSTANCE_NAME --zone=$ZONE --command="sudo metlo-deploy restart"
+```
+
+## Persistent Disk Backups
+
+Create snapshots for disaster recovery:
+
+```bash
+# Create a snapshot
+gcloud compute disks snapshot $INSTANCE_NAME \
+  --zone=$ZONE \
+  --snapshot-names=metlo-backup-$(date +%Y%m%d)
+
+# Create a snapshot schedule (daily at 3 AM)
+gcloud compute resource-policies create snapshot-schedule metlo-daily-backup \
+  --region=$REGION \
+  --start-time=03:00 \
+  --daily-schedule
+
+# Attach schedule to disk
+gcloud compute disks add-resource-policies $INSTANCE_NAME \
+  --zone=$ZONE \
+  --resource-policies=metlo-daily-backup
+```
+
+## Cost Optimization
+
+<Note>
+  **Estimated monthly costs** (us-central1 region):
+  - **n1-standard-2**: ~$50-60/month
+  - **n1-standard-4**: ~$100-120/month
+  - **50GB Standard Persistent Disk**: ~$2/month
+  - **50GB SSD Persistent Disk**: ~$8/month
+  - **Egress Traffic**: Varies by usage
+
+  Use the [GCP Pricing Calculator](https://cloud.google.com/products/calculator) for accurate estimates.
+</Note>
+
+### Cost-saving tips:
+
+1. **Use Committed Use Discounts**: Save up to 57% with 1 or 3-year commitments
+2. **Use Preemptible VMs**: For non-production environments (up to 80% cheaper)
+3. **Right-size instances**: Monitor usage and adjust machine types accordingly
+4. **Use Standard Persistent Disks**: Instead of SSD for non-performance-critical workloads
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Instance creation fails">
+    - Verify Compute Engine API is enabled
+    - Check quota limits in your project
+    - Ensure billing is enabled
+    - Try a different zone or machine type
+  </Accordion>
+
+  <Accordion title="Cannot access Metlo UI">
+    - Verify firewall rules are configured correctly
+    - Check that the instance is running: `gcloud compute instances list`
+    - SSH into instance and check service status: `sudo metlo-deploy status`
+    - Wait 15 minutes for full initialization
+  </Accordion>
+
+  <Accordion title="Startup script didn't run">
+    - Check serial port output: `gcloud compute instances get-serial-port-output $INSTANCE_NAME`
+    - Manually SSH into the instance and run the deployment script
+    - Verify instance has internet connectivity
+  </Accordion>
+
+  <Accordion title="Packet mirroring not working">
+    - Verify the packet mirroring policy is active
+    - Check that the ingestor instance can receive traffic
+    - Ensure firewall rules allow mirrored traffic
+    - Review packet mirroring configuration in GCP Console
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Packet Mirroring" icon="network-wired" href="/integrations/traffic-mirror/gcp">
+    Set up VPC packet mirroring
+  </Card>
+  <Card title="Connect Data Sources" icon="plug" href="/integrations/overview">
+    Configure additional integrations
+  </Card>
+  <Card title="Configure Alerts" icon="chart-line" href="/configuration/alerts-webhooks">
+    Configure webhook alerts
+  </Card>
+  <Card title="Environment Variables" icon="server" href="/configuration/environment-variables">
+    Configure environment settings
+  </Card>
+</CardGroup>

@@ -1,0 +1,256 @@
+---
+title: Attack Detection
+description: Real-time detection of malicious requests and API attacks
+---
+
+Metlo passively monitors your API traffic and uses pattern recognition to identify malicious requests, suspicious behavior, and common API attacks—all without impacting performance.
+
+## Attack Types Detected
+
+Metlo identifies several categories of API attacks and anomalies:
+
+<CardGroup cols={2}>
+  <Card title="BOLA" icon="lock-open">
+    Broken Object Level Authorization - users accessing objects they shouldn't
+  </Card>
+  <Card title="High Error Rate" icon="triangle-exclamation">
+    Unusual spike in 4xx/5xx errors indicating scanning or exploitation attempts
+  </Card>
+  <Card title="Sensitive Endpoint Abuse" icon="gauge-high">
+    Excessive requests to endpoints handling sensitive data
+  </Card>
+  <Card title="Unauthenticated Access" icon="user-slash">
+    Attempts to access protected resources without authentication
+  </Card>
+</CardGroup>
+
+## How Detection Works
+
+### Passive Traffic Analysis
+
+Metlo analyzes API traffic in real-time without requiring inline deployment:
+
+1. **Traffic Collection**: Receives mirrored or logged API requests
+2. **Pattern Analysis**: Compares against known attack signatures
+3. **Behavioral Modeling**: Builds a baseline of normal API usage
+4. **Anomaly Detection**: Flags deviations from expected patterns
+
+<Info>
+Metlo's passive approach means zero latency impact on your production API traffic. Detection happens asynchronously after requests are processed.
+</Info>
+
+### Attack Models
+
+Metlo uses multiple detection strategies:
+
+#### Signature-Based Detection
+
+Identifies known malicious patterns:
+- SQL injection attempts
+- XSS payloads  
+- Path traversal sequences
+- Authentication bypass attempts
+
+#### Behavioral Analysis
+
+Detects anomalies in API usage:
+- Unusual request rates from a single source
+- Access patterns that don't match legitimate use cases
+- Sequential object enumeration (BOLA detection)
+- Time-based anomalies (off-hours access)
+
+#### Statistical Models
+
+Tracks metrics per endpoint:
+- Error rate baselines
+- Typical request volumes
+- Common parameter values
+- Expected authentication patterns
+
+## Attack Context
+
+When an attack is detected, Metlo provides rich context:
+
+### Attack Details
+
+- **Attack Type**: Category of the detected attack
+- **Risk Score**: Severity assessment (Low, Medium, High)
+- **Start Time**: When the attack began
+- **Duration**: How long the attack persisted
+- **Source IP**: Originating IP address
+- **Session Key**: Unique identifier for tracking related requests
+
+### Affected Resources
+
+- **Endpoint**: Which API endpoint was targeted
+- **Host**: Affected service or host
+- **Request Count**: Number of malicious requests
+- **Sample Requests**: Example attack payloads
+
+<Tip>
+Use the unique session key to correlate related attack requests and identify coordinated attack campaigns.
+</Tip>
+
+## Viewing Attacks in the Dashboard
+
+### Attacks List
+
+The main attacks page shows:
+
+1. **Active Attacks**: Ongoing attack activity
+2. **Attack Timeline**: Chronological view of all detected attacks  
+3. **Filter Options**: By type, risk score, endpoint, or IP address
+4. **Status Management**: Mark attacks as resolved or snoozed
+
+### Attack Detail View
+
+Click any attack to see:
+
+- Full attack metadata and timeline
+- Affected endpoint information
+- Sample malicious requests with full context
+- Remediation recommendations
+- Option to block the attacker
+
+## Attack-Specific Detection
+
+### BOLA (Broken Object Level Authorization)
+
+Detects when users access resources they shouldn't:
+
+**Example scenario:**
+```
+User A authenticates and accesses /api/users/123/profile
+Same user then rapidly accesses /api/users/124/profile, 
+/api/users/125/profile, etc.
+```
+
+Metlo identifies this as potential object enumeration—attempting to access other users' data.
+
+<Warning>
+BOLA attacks are especially dangerous because they often succeed when authorization checks are missing or improperly implemented.
+</Warning>
+
+### High Error Rate
+
+Triggers when an endpoint experiences abnormal error rates:
+
+**Detection criteria:**
+- Error rate exceeds baseline by significant margin
+- Multiple 4xx errors from same source (scanning)
+- Sustained 5xx errors suggesting exploitation attempt
+
+**Common causes:**
+- Automated vulnerability scanning
+- Brute force authentication attempts
+- Exploitation of a vulnerability causing crashes
+
+### High Usage on Sensitive Endpoint
+
+Flags excessive requests to endpoints handling PII:
+
+**Risk factors:**
+- Endpoint has High risk score (contains sensitive data)
+- Request volume from single IP exceeds threshold
+- Unusual access patterns for the time of day
+
+**Potential threats:**
+- Data exfiltration attempts
+- Credential stuffing
+- Account takeover campaigns
+
+### Unauthenticated Access
+
+Detects access attempts without proper authentication:
+
+**Triggers when:**
+- Endpoint typically requires auth but receives unauthenticated requests
+- Missing or invalid authentication headers
+- Expired or revoked tokens being reused
+
+## Managing Detected Attacks
+
+### Resolution Workflow
+
+<Steps>
+  <Step title="Review Attack Details">
+    Examine the attack context, affected endpoints, and sample requests
+  </Step>
+  <Step title="Assess Impact">
+    Determine if the attack was successful or blocked by existing defenses
+  </Step>
+  <Step title="Remediate">
+    Fix any identified vulnerabilities or configuration issues
+  </Step>
+  <Step title="Block (Optional)">
+    Add the attacker's IP to the block list to prevent future attempts
+  </Step>
+  <Step title="Mark Resolved">
+    Update the attack status to track that it's been addressed
+  </Step>
+</Steps>
+
+### Snoozing Attacks
+
+For attacks that require time to investigate:
+
+1. Snooze for a specified number of hours
+2. Attack is hidden from active list
+3. Automatically resurfaces after snooze period
+4. Can un-snooze at any time
+
+<Info>
+Snoozing is useful for tracking attacks that are actively being investigated or waiting for a deployment window to fix.
+</Info>
+
+## Integration with Attack Blocking
+
+Detected attacks can automatically feed into blocking:
+
+- **Manual Blocking**: Review attack and manually add IP to block list
+- **Automated Blocking** (Enterprise): Configure rules to auto-block based on attack patterns
+
+## Best Practices
+
+<CardGroup cols={1}>
+  <Card title="Daily Review">
+    Check for new attacks daily, especially high-risk detections
+  </Card>
+  <Card title="Tune Thresholds">
+    Adjust detection sensitivity based on your traffic patterns to reduce false positives
+  </Card>
+  <Card title="Document Patterns">
+    Track common attack patterns targeting your APIs to improve defenses
+  </Card>
+  <Card title="Correlate with Logs">
+    Cross-reference Metlo attacks with application logs for full context
+  </Card>
+</CardGroup>
+
+## Ignored Detections
+
+Reduce noise by configuring ignored detection rules:
+
+**Use cases:**
+- Internal security scanning tools
+- Known partner integrations with high request rates  
+- Testing/staging environments
+- Specific endpoints where high error rates are expected
+
+**Configuration:**
+1. Define match criteria (IP, endpoint, attack type)
+2. Set ignore conditions
+3. Matching attacks won't create alerts
+
+<Tip>
+Use ignored detections sparingly—overly broad rules may hide real attacks.
+</Tip>
+
+## Webhook Alerts
+
+Get notified immediately when attacks are detected:
+
+- Configure webhook endpoints for attack alerts
+- Receive real-time notifications in Slack, PagerDuty, or custom systems
+- Filter which attack types trigger webhooks
+- Include full attack context in webhook payloads

@@ -1,0 +1,199 @@
+---
+title: Koa Integration
+description: Integrate Metlo with your Koa application for API security monitoring
+---
+
+Metlo's Node.js agent supports Koa through automatic middleware injection.
+
+## Installation
+
+Install the Metlo package from npm:
+
+<CodeGroup>
+```bash npm
+npm install metlo
+```
+
+```bash yarn
+yarn add metlo
+```
+
+```bash pnpm
+pnpm add metlo
+```
+</CodeGroup>
+
+## Quick Start
+
+Add Metlo to your Koa application by requiring it at the start of your main script:
+
+```javascript
+var metlo = require("metlo")
+metlo("<YOUR_METLO_API_KEY>", "<YOUR_METLO_COLLECTOR_URL>")
+
+// Then initialize Koa as usual
+const Koa = require("koa")
+const app = new Koa()
+
+app.use(async ctx => {
+  ctx.body = "Hello World"
+})
+
+app.listen(3000)
+```
+
+<Warning>
+The `metlo()` call must be placed **before** you require Koa. This allows Metlo to instrument the framework and automatically inject its middleware.
+</Warning>
+
+## Configuration
+
+### Required Parameters
+
+<ParamField path="apiKey" type="string" required>
+  Your Metlo API key for authentication with the collector
+</ParamField>
+
+<ParamField path="collectorUrl" type="string" required>
+  The URL of your Metlo collector instance (e.g., `https://collector.metlo.com`)
+</ParamField>
+
+### Optional Configuration
+
+```javascript
+var metlo = require("metlo")
+metlo("<YOUR_METLO_API_KEY>", "<YOUR_METLO_COLLECTOR_URL>", {
+  apiHost: "https://api.example.com",
+})
+```
+
+<ParamField path="apiHost" type="string">
+  Override the host value sent in trace data. Useful when your application is behind a proxy or load balancer.
+</ParamField>
+
+## How It Works
+
+Metlo's Koa integration automatically injects middleware that:
+
+1. **Runs first** - Positioned at index 0 in the middleware chain
+2. **Executes after response** - Uses `await next()` to capture the final response
+3. **Self-managing** - Automatically repositions itself if other middleware is added
+4. **Asynchronous** - Sends data to Metlo without blocking the response
+
+### Middleware Behavior
+
+The integration patches `app.use()` to ensure Metlo's middleware:
+- Is always executed first in the chain
+- Captures the complete request/response cycle
+- Doesn't interfere with other middleware
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers
+- Request body (from `ctx.request.body`)
+- Source IP and port
+
+**Response:**
+- Status code
+- Headers
+- Response body (from `ctx.body`)
+- Destination IP and port
+
+**Metadata:**
+- Environment (from `process.env.NODE_ENV`)
+- Source identifier: `node/koa`
+- Timestamp
+
+## Example with Body Parser
+
+```javascript
+var metlo = require("metlo")
+metlo(process.env.METLO_API_KEY, process.env.METLO_COLLECTOR_URL)
+
+const Koa = require("koa")
+const bodyParser = require("koa-bodyparser")
+const Router = require("@koa/router")
+
+const app = new Koa()
+const router = new Router()
+
+app.use(bodyParser())
+
+router.post("/api/users", async (ctx) => {
+  const userData = ctx.request.body
+  // Your application logic
+  ctx.body = { success: true, data: userData }
+})
+
+app.use(router.routes())
+app.use(router.allowedMethods())
+
+app.listen(3000, () => {
+  console.log("Server running on port 3000")
+})
+```
+
+<Note>
+If you're using `koa-bodyparser`, make sure to install it separately. Metlo will automatically capture the parsed body from `ctx.request.body`.
+</Note>
+
+## Example with TypeScript
+
+```typescript
+import metlo from "metlo"
+metlo(process.env.METLO_API_KEY!, process.env.METLO_COLLECTOR_URL!)
+
+import Koa from "koa"
+import bodyParser from "koa-bodyparser"
+
+const app = new Koa()
+
+app.use(bodyParser())
+
+app.use(async (ctx) => {
+  ctx.body = { message: "Hello World" }
+})
+
+app.listen(3000)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Request body is empty">
+    Metlo captures the body from `ctx.request.body`. Make sure you're using a body parser middleware like `koa-bodyparser` before your route handlers.
+  </Accordion>
+
+  <Accordion title="Middleware order issues">
+    Metlo automatically positions its middleware first. If you're experiencing issues, check that `metlo()` is called before requiring Koa.
+  </Accordion>
+
+  <Accordion title="Response not captured">
+    Ensure your routes set `ctx.body`. Metlo captures whatever value is assigned to `ctx.body` after all middleware completes.
+  </Accordion>
+</AccordionGroup>
+
+## Requirements
+
+- Node.js >= 11.7.0
+- Koa (any version)
+
+## Async/Await Support
+
+Koa's async/await-based middleware model is fully supported. Metlo's middleware properly awaits the completion of downstream middleware before capturing the response.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="View API Inventory" icon="list" href="/features/endpoint-discovery">
+    See your discovered APIs in the Metlo dashboard
+  </Card>
+  <Card title="Sensitive Data Detection" icon="shield" href="/features/sensitive-data-scanning">
+    Identify PII and sensitive data in your APIs
+  </Card>
+</CardGroup>

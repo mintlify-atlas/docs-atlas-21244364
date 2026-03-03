@@ -1,0 +1,118 @@
+---
+title: API Overview
+description: Introduction to the Metlo API for programmatic access to your API security data
+---
+
+The Metlo API provides programmatic access to your API security platform, allowing you to manage endpoints, alerts, data classes, and testing configurations.
+
+## Base URL
+
+All API endpoints are served from your Metlo instance:
+
+```
+https://<your-metlo-instance>/api/v1
+```
+
+## Authentication
+
+All API requests must be authenticated using an API key. See the [Authentication](/api/authentication) page for details on how to obtain and use API keys.
+
+## Response Format
+
+### Success Response
+
+Successful requests return HTTP status `200` with the response payload:
+
+```json
+{
+  // Response data
+}
+```
+
+### Error Response
+
+Failed requests return appropriate HTTP status codes with error messages:
+
+```json
+"Error message describing what went wrong"
+```
+
+## HTTP Status Codes
+
+The Metlo API uses standard HTTP status codes:
+
+| Status Code | Description |
+|------------|-------------|
+| `200` | Success |
+| `400` | Bad Request - Invalid parameters or validation error |
+| `401` | Unauthorized - Missing or invalid API key |
+| `404` | Not Found - Resource does not exist |
+| `409` | Conflict - Resource already exists |
+| `422` | Unprocessable Entity - Request cannot be processed |
+| `500` | Internal Server Error - Something went wrong on the server |
+
+## Validation Errors
+
+When request parameters fail validation, you'll receive a `400` status with details:
+
+```json
+{
+  "type": "ZOD",
+  "message": "field.name: Invalid value",
+  "err": {
+    // Detailed validation error information
+  }
+}
+```
+
+## Pagination
+
+Many list endpoints support pagination using `offset` and `limit` parameters:
+
+<ParamField query="offset" type="number" default="0">
+  Number of items to skip
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Maximum number of items to return
+</ParamField>
+
+## Filtering
+
+Most list endpoints support filtering by various criteria. Common filters include:
+
+- **Risk Scores**: Filter by security risk level (HIGH, MEDIUM, LOW, NONE)
+- **Hosts**: Filter by hostname
+- **Status**: Filter by status (RESOLVED, IGNORED, etc.)
+- **Search Query**: Text search across relevant fields
+
+## API Sections
+
+The Metlo API is organized into the following sections:
+
+<CardGroup cols={2}>
+  <Card title="Endpoints API" icon="route" href="/api/endpoints">
+    Manage and query your API endpoints
+  </Card>
+  <Card title="Alerts API" icon="bell" href="/api/alerts">
+    View and manage security alerts
+  </Card>
+  <Card title="Data Classes API" icon="database" href="/api/data-classes">
+    Access data classification information
+  </Card>
+  <Card title="Testing API" icon="flask" href="/api/testing">
+    Generate and manage API tests
+  </Card>
+</CardGroup>
+
+## Rate Limiting
+
+Currently, there are no enforced rate limits on the Metlo API. However, we recommend implementing client-side rate limiting to avoid overloading your instance.
+
+## Need Help?
+
+If you encounter issues or have questions about the API:
+
+- Check the specific endpoint documentation
+- Review error messages for validation details
+- Contact support with your request details

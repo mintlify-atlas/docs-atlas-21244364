@@ -1,0 +1,345 @@
+---
+title: AWS Traffic Mirroring
+description: Mirror VPC traffic to Metlo for network-level API security monitoring
+---
+
+Metlo supports AWS Traffic Mirroring to capture API traffic without modifying your application code. This is ideal for production environments where you cannot deploy agents.
+
+## Overview
+
+AWS Traffic Mirroring allows you to copy network traffic from:
+- **EC2 Instances** - Individual virtual machines
+- **ECS Services** - Containerized applications
+- **Network Interfaces** - Elastic Network Interfaces (ENIs)
+- **Load Balancers** - Application and Network Load Balancers
+
+Traffic is mirrored to a Metlo collector instance running in your VPC.
+
+## Prerequisites
+
+<Check>
+- AWS account with appropriate permissions
+- VPC with source resources to mirror
+- Metlo collector deployed (or will be deployed by the CLI)
+- AWS CLI configured with credentials
+- Metlo CLI installed
+</Check>
+
+## Installation
+
+Install the Metlo CLI:
+
+```bash
+npm install -g @metlo/cli
+```
+
+Or use with npx:
+
+```bash
+npx @metlo/cli
+```
+
+## Setup Traffic Mirroring
+
+<Steps>
+  <Step title="Run Metlo CLI setup">
+    Execute the AWS traffic mirroring setup command:
+
+    ```bash
+    metlo traffic-mirror aws setup
+    ```
+
+    The CLI will guide you through an interactive setup process.
+  </Step>
+
+  <Step title="Select AWS region">
+    Choose the AWS region where your resources are located:
+
+    ```
+    ? Select your AWS region:
+    ❯ us-east-1
+      us-east-2
+      us-west-1
+      us-west-2
+      eu-west-1
+      ...
+    ```
+  </Step>
+
+  <Step title="Choose source type">
+    Select the type of source to mirror:
+
+    ```
+    ? Select mirror source type:
+    ❯ EC2 Instance
+      Network Interface
+      ECS Service
+      Load Balancer
+    ```
+  </Step>
+
+  <Step title="Select specific source">
+    Choose the specific instance, interface, or service to mirror:
+
+    For EC2 instances:
+    ```
+    ? Select the id of your EC2 Instance:
+    ❯ web-server-1: i-0123456789abcdef0
+      api-server-1: i-0123456789abcdef1
+      ...
+    ```
+  </Step>
+
+  <Step title="Configure mirror target">
+    The CLI will create or select a mirror target (the Metlo collector instance).
+
+    If no collector exists, it will create:
+    - Network Load Balancer for the mirror target
+    - Target group
+    - Mirror session
+  </Step>
+
+  <Step title="Verify setup">
+    Once complete, verify the mirror session:
+
+    ```bash
+    metlo traffic-mirror aws list
+    ```
+  </Step>
+</Steps>
+
+## Source Types
+
+### EC2 Instance
+
+Mirror traffic from a specific EC2 instance:
+
+- Captures all traffic from all network interfaces attached to the instance
+- Useful for monitoring individual application servers
+- Supports instances with multiple ENIs
+
+### Network Interface
+
+Mirror traffic from a specific ENI:
+
+- Fine-grained control over which traffic is captured
+- Useful for complex networking setups
+- Can mirror interfaces from instances, load balancers, or other resources
+
+### ECS Service
+
+Mirror traffic from ECS tasks:
+
+- Automatically discovers ENIs from ECS tasks
+- Monitors containerized applications
+- Supports both EC2 and Fargate launch types
+
+### Load Balancer
+
+Mirror traffic from Application or Network Load Balancers:
+
+- Captures all traffic passing through the load balancer
+- Ideal for monitoring API gateways
+- Mirrors from load balancer ENIs
+
+## Mirror Session Configuration
+
+The Metlo CLI automatically creates:
+
+### Mirror Filter
+
+- **Protocol**: All traffic or specific protocols (TCP, UDP)
+- **Direction**: Ingress, egress, or both
+- **Port ranges**: Optional filtering by port
+
+### Mirror Target
+
+- Network Load Balancer receiving mirrored traffic
+- Forwards traffic to Metlo collector instances
+- Configured with appropriate target groups
+
+### Mirror Session
+
+- Links source (your resources) to target (Metlo collector)
+- Configurable session number (1-32766)
+- VNI (Virtual Network Identifier) for packet encapsulation
+
+## Traffic Filtering
+
+By default, Metlo mirrors all traffic. You can filter to reduce volume:
+
+```typescript
+// Filter configuration (in CLI source code)
+{
+  sourcePortRange: { from: 443, to: 443 },  // HTTPS only
+  protocol: Protocols.TCP,
+  direction: "ingress"  // Inbound traffic only
+}
+```
+
+<Note>
+Filtering options are configured through the CLI's interactive prompts or by modifying the setup parameters.
+</Note>
+
+## List Mirror Sessions
+
+View all active mirror sessions:
+
+```bash
+metlo traffic-mirror aws list
+```
+
+Output shows:
+- Session ID
+- Source type and ID
+- Target information
+- Mirror status
+
+## Remove Mirror Session
+
+Delete a specific mirror session:
+
+```bash
+metlo traffic-mirror aws remove
+```
+
+The CLI will prompt you to select which session to remove.
+
+<Warning>
+Removing a mirror session stops traffic collection immediately. Ensure you have alternative monitoring in place if needed.
+</Warning>
+
+## Architecture
+
+```
+┌─────────────────┐
+│  EC2 Instance   │
+│  (Source)       │
+└────────┬────────┘
+         │ Mirrored Traffic
+         │ (VXLAN encapsulated)
+         ▼
+┌─────────────────┐
+│ Network Load    │
+│ Balancer        │
+│ (Mirror Target) │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Metlo Collector │
+│ Instance        │
+└─────────────────┘
+```
+
+## Supported Instance Types
+
+Not all EC2 instance types support traffic mirroring. Supported types include:
+
+- C5, C5n, C6i, C6in
+- M5, M5n, M6i, M6in
+- R5, R5n, R6i, R6in
+- T3 (with some limitations)
+- And more...
+
+See [AWS documentation](https://docs.aws.amazon.com/vpc/latest/mirroring/traffic-mirroring-considerations.html) for the complete list.
+
+## Pricing Considerations
+
+<Warning>
+AWS Traffic Mirroring incurs additional costs:
+- **Mirror session fees**: ~$0.015 per hour per ENI
+- **Data transfer**: Standard AWS data transfer rates
+- **Collector instance**: EC2 instance costs for running Metlo collector
+- **Network Load Balancer**: NLB hourly and data processing charges
+</Warning>
+
+Estimate costs before deployment, especially for high-traffic environments.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Traffic not appearing in Metlo">
+    Check:
+    - Mirror session status is "active"
+    - Metlo collector instance is running
+    - Security groups allow VXLAN traffic (UDP port 4789)
+    - Source instance type supports traffic mirroring
+    - Network ACLs don't block mirrored traffic
+  </Accordion>
+
+  <Accordion title="CLI can't find instances">
+    Verify:
+    - AWS credentials are configured correctly
+    - You have permissions to describe EC2 instances
+    - You're in the correct AWS region
+    - Resources exist in the selected VPC
+  </Accordion>
+
+  <Accordion title="Mirror target creation failed">
+    Ensure:
+    - You have permissions to create NLB and target groups
+    - VPC has available IP addresses
+    - Subnet configuration is correct
+    - Service quotas allow additional resources
+  </Accordion>
+
+  <Accordion title="High costs">
+    To reduce costs:
+    - Use traffic filtering to capture only API traffic
+    - Mirror only production-critical resources
+    - Monitor data transfer volumes
+    - Consider using on-demand instead of continuous mirroring
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+- **Encrypted traffic**: Mirrored TLS/SSL traffic is still encrypted; Metlo analyzes metadata
+- **Sensitive data**: Ensure Metlo collector has appropriate security controls
+- **Network isolation**: Deploy collector in a secure subnet with restricted access
+- **IAM permissions**: Use least-privilege IAM policies for CLI operations
+
+## Required IAM Permissions
+
+The AWS account used by the CLI needs:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeTrafficMirrorSessions",
+        "ec2:DescribeTrafficMirrorTargets",
+        "ec2:DescribeTrafficMirrorFilters",
+        "ec2:CreateTrafficMirrorSession",
+        "ec2:CreateTrafficMirrorTarget",
+        "ec2:CreateTrafficMirrorFilter",
+        "ec2:DeleteTrafficMirrorSession",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTargetGroups",
+        "ecs:DescribeClusters",
+        "ecs:DescribeServices",
+        "ecs:ListTasks",
+        "ecs:DescribeTasks"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="GCP Mirroring" icon="cloud" href="/integrations/traffic-mirror/gcp">
+    Set up traffic mirroring on Google Cloud Platform
+  </Card>
+  <Card title="View API Inventory" icon="list" href="/features/endpoint-discovery">
+    Explore APIs discovered through traffic mirroring
+  </Card>
+</CardGroup>

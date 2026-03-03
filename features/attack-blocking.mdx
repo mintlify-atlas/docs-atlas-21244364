@@ -1,0 +1,330 @@
+---
+title: Attack Blocking
+description: Automatically block malicious actors and prevent API attacks in real-time
+---
+
+Metlo's attack blocking feature allows you to proactively block bad actors identified through attack detection, preventing them from accessing your APIs and causing further damage.
+
+<Note>
+Attack blocking requires Metlo agents deployed inline with your API traffic. This is an Enterprise feature.
+</Note>
+
+## How Blocking Works
+
+Metlo uses a cloud-coordinated, edge-enforced blocking model:
+
+<Steps>
+  <Step title="Detection">
+    Metlo's cloud detection engine analyzes traffic and identifies malicious patterns
+  </Step>
+  <Step title="Model Building">
+    The cloud engine builds a model of attack patterns and bad actor identifiers
+  </Step>
+  <Step title="Distribution">
+    Block lists are distributed to Metlo agents running alongside your APIs
+  </Step>
+  <Step title="Enforcement">
+    Agents block requests from identified bad actors in real-time at the edge
+  </Step>
+</Steps>
+
+## Blocking Methods
+
+Metlo can block based on multiple identifiers:
+
+<CardGroup cols={2}>
+  <Card title="IP Address" icon="location-dot">
+    Block requests from specific source IPs
+  </Card>
+  <Card title="User Session" icon="user">
+    Block based on session identifiers or user IDs
+  </Card>
+  <Card title="API Key" icon="key">
+    Revoke access for compromised or abusive API keys
+  </Card>
+  <Card title="Custom Headers" icon="bars">
+    Block based on any custom header pattern
+  </Card>
+</CardGroup>
+
+## Manual Blocking
+
+Block bad actors directly from the Metlo dashboard:
+
+### From Attack Details
+
+1. Navigate to the Attacks page
+2. Click on an attack to view details
+3. Review the source IP and attack pattern
+4. Click "Block IP" to add to block list
+5. Optionally add notes explaining the block reason
+
+### From Block List Management
+
+1. Go to Settings → Blocking
+2. Click "Add Block Rule"
+3. Configure:
+   - **Match Criteria**: IP, user ID, session key, etc.
+   - **Block Duration**: Permanent or time-limited
+   - **Scope**: All endpoints or specific paths
+4. Save the rule
+
+<Tip>
+Use time-limited blocks for suspected false positives. Review after 24-48 hours and convert to permanent if confirmed malicious.
+</Tip>
+
+## Automated Blocking (Enterprise)
+
+Configure rules to automatically block based on attack patterns:
+
+### Block Rule Configuration
+
+**Rule Components:**
+- **Trigger**: Attack type or pattern (e.g., "BOLA detected")
+- **Threshold**: How many incidents before blocking (e.g., "3 attacks in 10 minutes")
+- **Action**: Block duration and scope
+- **Exceptions**: IPs or users to never block
+
+**Example Rules:**
+
+```yaml
+# Auto-block high-rate BOLA attacks
+name: Block BOLA Attackers
+trigger: attack_type == "BOLA"
+threshold: 3 incidents in 10 minutes
+action: block_ip for 24 hours
+scope: all endpoints
+
+# Block brute force attempts
+name: Block Brute Force
+trigger: high_error_rate on /auth/* endpoints  
+threshold: 10 failed requests in 1 minute
+action: block_ip for 1 hour
+exceptions: ["10.0.0.0/8"]  # Don't block internal IPs
+```
+
+## Agent Deployment
+
+For blocking to work, deploy Metlo agents inline with traffic:
+
+### Deployment Options
+
+<Tabs>
+  <Tab title="Kubernetes">
+    Deploy as a sidecar container in your pods:
+    ```yaml
+    - name: metlo-agent
+      image: metlo/agent:latest
+      env:
+        - name: METLO_HOST
+          value: "https://your-metlo-instance.com"
+        - name: METLO_KEY
+          valueFrom:
+            secretKeyRef:
+              name: metlo-secret
+              key: api-key
+    ```
+  </Tab>
+  <Tab title="Node.js">
+    Install the middleware:
+    ```javascript
+    const metlo = require('@metlo/node')
+    
+    app.use(metlo.middleware({
+      metloHost: 'https://your-metlo-instance.com',
+      metloKey: process.env.METLO_KEY
+    }))
+    ```
+  </Tab>
+  <Tab title="Python">
+    Use the WSGI/ASGI middleware:
+    ```python
+    from metlo import MetloMiddleware
+    
+    app.add_middleware(
+        MetloMiddleware,
+        metlo_host="https://your-metlo-instance.com",
+        metlo_key=os.environ["METLO_KEY"]
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Agent Configuration
+
+Configure blocking behavior:
+
+- **Block Mode**: Enforce or monitor-only
+- **Sync Interval**: How often to pull updated block lists (default: 60 seconds)
+- **Fallback Behavior**: What to do if can't reach Metlo cloud (allow or deny)
+- **Custom Response**: HTTP status and message for blocked requests
+
+<Warning>
+Set fallback behavior carefully. "Deny on failure" is most secure but may block legitimate traffic if Metlo cloud is unreachable.
+</Warning>
+
+## Block List Management
+
+### Viewing Active Blocks
+
+The block list shows:
+- All active blocking rules
+- When each rule was created
+- Who created it (manual vs automated)
+- Number of requests blocked
+- Expiration time for temporary blocks
+
+### Removing Blocks
+
+To unblock:
+
+1. Find the block rule in the list
+2. Click "Remove" or "Edit"
+3. Optionally add a note about why it was removed
+4. Changes sync to agents within the configured interval
+
+<Info>
+Removed blocks are logged for audit purposes. You can review the history of all blocking actions.
+</Info>
+
+## Field-Level Blocking
+
+Beyond IP blocking, Metlo can redact or block specific data fields:
+
+### Use Cases
+
+- **PCI Compliance**: Prevent credit card data from being logged
+- **GDPR**: Block PII from certain endpoints or geographies  
+- **Data Loss Prevention**: Redact sensitive fields before external sharing
+
+### Configuration
+
+1. Navigate to the endpoint details page
+2. Go to the "Block Fields" tab
+3. Select data fields to block:
+   - Request query parameters
+   - Request/response headers
+   - Request/response body fields
+4. Choose action:
+   - **Redact**: Replace with `[REDACTED]`
+   - **Remove**: Strip field entirely
+   - **Block Request**: Reject requests containing the field
+
+**Example Configuration:**
+```
+Endpoint: POST /api/payment
+Blocked Fields:
+  - req.body.creditCard → REDACT
+  - req.body.cvv → REDACT  
+  - res.body.internalId → REMOVE
+```
+
+## Monitoring Blocked Requests
+
+### Blocked Request Logs
+
+View all blocked requests in real-time:
+
+- **Source IP**: Who was blocked
+- **Endpoint**: What they tried to access
+- **Block Reason**: Which rule triggered the block
+- **Timestamp**: When it occurred
+- **Request Details**: Full context (headers, payload)
+
+### Metrics and Analytics
+
+Track blocking effectiveness:
+
+- Total requests blocked over time
+- Most blocked IPs
+- Most targeted endpoints
+- Block rule efficiency (false positive rate)
+
+<Tip>
+High block counts on specific endpoints may indicate a targeted attack campaign or misconfiguration—investigate further.
+</Tip>
+
+## Best Practices
+
+<CardGroup cols={1}>
+  <Card title="Start in Monitor Mode">
+    Deploy agents in monitor-only mode first to validate blocking rules don't affect legitimate traffic
+  </Card>
+  <Card title="Use Time-Limited Blocks">
+    Default to temporary blocks (1-24 hours) to automatically unblock if threat subsides
+  </Card>
+  <Card title="Whitelist Internal IPs">
+    Ensure internal networks, monitoring tools, and known partners are whitelisted
+  </Card>
+  <Card title="Review Block Logs Weekly">
+    Check blocked requests regularly to identify false positives and refine rules
+  </Card>
+  <Card title="Combine with WAF">
+    Use Metlo blocking for API-specific attacks; traditional WAF for broader protection
+  </Card>
+</CardGroup>
+
+## Whitelisting
+
+Prevent specific IPs or users from ever being blocked:
+
+### Creating Whitelists
+
+1. Go to Settings → Blocking → Whitelists
+2. Add whitelist entries:
+   - **IP ranges**: CIDR notation for networks
+   - **User IDs**: Specific authenticated users
+   - **API keys**: Service accounts or partners
+3. Add description for audit trail
+
+**Common Whitelist Entries:**
+- Internal office networks
+- Monitoring and health check systems
+- Partner API integrations
+- Development/staging environments
+
+<Warning>
+Whitelisting bypasses all blocking rules. Only whitelist truly trusted sources.
+</Warning>
+
+## Troubleshooting
+
+### Legitimate Users Being Blocked
+
+**Symptoms:**
+- User reports 403 Forbidden errors
+- Block logs show legitimate IP/user
+
+**Solutions:**
+1. Check if automated rule was too aggressive
+2. Review attack that triggered the block—false positive?
+3. Add to whitelist if frequently blocked incorrectly
+4. Adjust threshold or add exceptions to blocking rule
+
+### Blocks Not Enforcing
+
+**Symptoms:**
+- Attacks continue from blocked IPs
+- Block list shows rule but requests aren't blocked
+
+**Solutions:**
+1. Verify agents are deployed inline (not just mirroring)
+2. Check agent logs for connection to Metlo cloud
+3. Confirm sync interval—may take 60s for new blocks to propagate
+4. Ensure block mode is "enforce" not "monitor"
+
+### Performance Impact
+
+**Symptoms:**
+- Increased latency after enabling blocking
+- High CPU usage on agent containers
+
+**Solutions:**
+1. Increase agent resource allocation
+2. Optimize block list—remove expired or unnecessary rules
+3. Adjust sync interval to reduce update frequency
+4. Consider horizontal scaling of agents
+
+<Info>
+Metlo agents are designed for minimal overhead, typically adding less than 5ms latency. Higher impact suggests configuration issues.
+</Info>

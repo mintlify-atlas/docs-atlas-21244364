@@ -1,0 +1,543 @@
+---
+title: "Creating Custom Test Templates"
+description: "Build reusable test templates to automate security testing for your specific use cases"
+---
+
+## Overview
+
+Custom test templates allow you to:
+
+- Create reusable test patterns for your specific API security needs
+- Auto-generate tests from endpoint metadata
+- Standardize security testing across your organization
+- Extend Metlo's built-in templates with custom logic
+
+## Template Structure
+
+A test template is a TypeScript or JavaScript module that exports:
+
+- **name** - Template identifier
+- **version** - Template version number
+- **builder** - Function that generates a test configuration
+
+```typescript
+import { GenTestEndpoint, TestBuilder, TemplateConfig } from "@metlo/testing"
+
+export default {
+  name: "CUSTOM_TEMPLATE",
+  version: 1,
+  builder: (endpoint: GenTestEndpoint, config: TemplateConfig) => {
+    return new TestBuilder()
+      .setMeta({
+        name: `${endpoint.path} Custom Test`,
+        severity: "HIGH",
+        tags: ["CUSTOM"],
+      })
+      .addTestStep(
+        // Define test steps
+      )
+  },
+}
+```
+
+## Setting Up Custom Templates
+
+<Steps>
+  <Step title="Initialize Template Project">
+    Create a new custom template project:
+    
+    ```bash
+    metlo test init-custom-templates my-templates
+    ```
+    
+    This creates:
+    - `package.json` with `@metlo/testing` dependency
+    - `templates/` directory for your templates
+  </Step>
+  
+  <Step title="Create Template File">
+    Create a new template in `templates/`:
+    
+    ```bash
+    touch templates/custom-auth.ts
+    ```
+  </Step>
+  
+  <Step title="Write Template Logic">
+    Implement your template using the builder API
+  </Step>
+  
+  <Step title="Generate Tests">
+    Use your custom template:
+    
+    ```bash
+    metlo test generate \
+      --test ./templates/custom-auth.ts \
+      --host api.example.com \
+      --endpoint /api/data \
+      --method GET \
+      --path output.yaml
+    ```
+  </Step>
+</Steps>
+
+## Template Builder API
+
+### TestBuilder
+
+The `TestBuilder` class helps construct test configurations:
+
+```typescript
+import { TestBuilder, TestStepBuilder } from "@metlo/testing"
+
+const test = new TestBuilder()
+  .setMeta({
+    name: "My Test",
+    severity: "HIGH",
+    tags: ["CUSTOM"],
+  })
+  .addEnv("BASE_URL", "https://api.example.com")
+  .addTestStep(
+    new TestStepBuilder()
+      .setMethod("GET")
+      .setUrl("{{BASE_URL}}/endpoint")
+      .addHeader("Authorization", "Bearer token")
+      .assert({
+        key: "resp.status",
+        value: 200,
+      })
+  )
+  .getTest()
+```
+
+### TestStepBuilder
+
+Build individual test steps:
+
+<CodeGroup>
+
+```typescript Basic Request
+new TestStepBuilder()
+  .setMethod("GET")
+  .setUrl("https://api.example.com/users")
+  .addHeader("Content-Type", "application/json")
+  .assert({
+    key: "resp.status",
+    value: 200,
+  })
+```
+
+```typescript With Authentication
+import { TestStepBuilder } from "@metlo/testing"
+
+TestStepBuilder.sampleRequest(endpoint, config)
+  .assert({
+    type: "JS",
+    value: "resp.status < 300",
+  })
+```
+
+```typescript Without Authentication
+TestStepBuilder.sampleRequestWithoutAuth(endpoint, config)
+  .assert({
+    key: "resp.status",
+    value: [401, 403],
+  })
+```
+
+```typescript With Data Extraction
+new TestStepBuilder()
+  .setMethod("POST")
+  .setUrl("https://api.example.com/login")
+  .setData(JSON.stringify({ username: "user", password: "pass" }))
+  .extract({
+    name: "authToken",
+    type: "VALUE",
+    value: "resp.data.token",
+  })
+  .assert({
+    key: "resp.status",
+    value: 200,
+  })
+```
+
+</CodeGroup>
+
+## Built-in Template Examples
+
+### Broken Authentication Template
+
+Tests that authentication is properly enforced:
+
+```typescript
+import { GenTestEndpoint, TestBuilder, TestStepBuilder } from "@metlo/testing"
+import { AssertionType } from "@metlo/testing/dist/types/enums"
+import { TemplateConfig } from "@metlo/testing/dist/types/resource_config"
+
+export default {
+  name: "BROKEN_AUTHENTICATION",
+  version: 1,
+  builder: (endpoint: GenTestEndpoint, config: TemplateConfig) => {
+    if (!endpoint.authConfig) {
+      throw new Error(`No auth config defined for host: "${endpoint.host}"`)
+    }
+
+    return new TestBuilder()
+      .setMeta({
+        name: `${endpoint.path} Broken Authentication`,
+        severity: "HIGH",
+        tags: ["BROKEN_AUTHENTICATION"],
+      })
+      .addTestStep(
+        TestStepBuilder.sampleRequest(endpoint, config).assert({
+          type: AssertionType.enum.JS,
+          value: "resp.status < 300",
+        })
+      )
+      .addTestStep(
+        TestStepBuilder.sampleRequestWithoutAuth(endpoint, config).assert({
+          type: AssertionType.enum.EQ,
+          key: "resp.status",
+          value: [401, 403],
+        })
+      )
+  },
+}
+```
+
+### BOLA (Broken Object Level Authorization) Template
+
+Tests that users can't access other users' resources:
+
+```typescript
+import { GenTestEndpoint, TestBuilder, TestStepBuilder } from "@metlo/testing"
+import { AssertionType } from "@metlo/testing/dist/types/enums"
+import { TemplateConfig } from "@metlo/testing/dist/types/resource_config"
+
+export default {
+  name: "BOLA",
+  version: 1,
+  builder: (endpoint: GenTestEndpoint, config: TemplateConfig) => {
+    if (!endpoint.authConfig) {
+      throw new Error(`No auth config defined for host: "${endpoint.host}"`)
+    }
+
+    return new TestBuilder()
+      .setMeta({
+        name: `${endpoint.path} BOLA`,
+        severity: "HIGH",
+        tags: ["BOLA"],
+      })
+      // User A can access their own resources
+      .addTestStep(
+        TestStepBuilder.sampleRequest(endpoint, config, "USER_A").assert({
+          type: AssertionType.enum.JS,
+          value: "resp.status < 300",
+        })
+      )
+      // User B cannot access User A's resources
+      .addTestStep(
+        TestStepBuilder.sampleRequestWithoutAuth(endpoint, config, "USER_A")
+          .addAuth(endpoint, "USER_B")
+          .assert({
+            type: AssertionType.enum.EQ,
+            key: "resp.status",
+            value: [401, 403],
+          })
+      )
+      // User A cannot access User B's resources
+      .addTestStep(
+        TestStepBuilder.sampleRequestWithoutAuth(endpoint, config, "USER_B")
+          .addAuth(endpoint, "USER_A")
+          .assert({
+            type: AssertionType.enum.EQ,
+            key: "resp.status",
+            value: [401, 403],
+          })
+      )
+  },
+}
+```
+
+## Custom Template Examples
+
+### Rate Limiting Test
+
+```typescript
+import { GenTestEndpoint, TestBuilder, TestStepBuilder } from "@metlo/testing"
+import { TemplateConfig } from "@metlo/testing/dist/types/resource_config"
+
+export default {
+  name: "RATE_LIMIT",
+  version: 1,
+  builder: (endpoint: GenTestEndpoint, config: TemplateConfig) => {
+    const builder = new TestBuilder()
+      .setMeta({
+        name: `${endpoint.path} Rate Limiting`,
+        severity: "MEDIUM",
+        tags: ["RATE_LIMIT"],
+      })
+
+    // Make 100 requests rapidly
+    for (let i = 0; i < 100; i++) {
+      builder.addTestStep(
+        TestStepBuilder.sampleRequest(endpoint, config)
+          .assert({
+            type: "JS",
+            value: "resp.status === 200 || resp.status === 429",
+            description: `Request ${i + 1} should succeed or be rate limited`,
+          })
+      )
+    }
+
+    // Verify at least some requests were rate limited
+    builder.addTestStep(
+      new TestStepBuilder()
+        .setMethod("GET")
+        .setUrl("{{BASE_URL}}/dummy")
+        .assert({
+          type: "JS",
+          value: "true", // Placeholder for checking rate limit was hit
+          description: "At least one request should have been rate limited",
+        })
+    )
+
+    return builder
+  },
+}
+```
+
+### Input Validation Test
+
+```typescript
+import { GenTestEndpoint, TestBuilder, TestStepBuilder } from "@metlo/testing"
+import { TemplateConfig } from "@metlo/testing/dist/types/resource_config"
+
+export default {
+  name: "INPUT_VALIDATION",
+  version: 1,
+  builder: (endpoint: GenTestEndpoint, config: TemplateConfig) => {
+    const invalidInputs = [
+      { name: "empty string", value: "" },
+      { name: "very long string", value: "a".repeat(10000) },
+      { name: "null", value: "null" },
+      { name: "special characters", value: "<script>alert('xss')</script>" },
+      { name: "SQL injection", value: "'; DROP TABLE users; --" },
+    ]
+
+    const builder = new TestBuilder()
+      .setMeta({
+        name: `${endpoint.path} Input Validation`,
+        severity: "HIGH",
+        tags: ["INPUT_VALIDATION"],
+      })
+
+    for (const input of invalidInputs) {
+      builder.addTestStep(
+        new TestStepBuilder()
+          .setMethod(endpoint.method)
+          .setUrl(`${endpoint.host}${endpoint.path}`)
+          .setData(JSON.stringify({ input: input.value }))
+          .addHeader("Content-Type", "application/json")
+          .assert({
+            type: "JS",
+            value: "resp.status === 400 || resp.status === 422",
+            description: `Should reject ${input.name}`,
+          })
+      )
+    }
+
+    return builder
+  },
+}
+```
+
+### Custom Header Validation
+
+```typescript
+import { GenTestEndpoint, TestBuilder, TestStepBuilder } from "@metlo/testing"
+import { TemplateConfig } from "@metlo/testing/dist/types/resource_config"
+
+export default {
+  name: "SECURITY_HEADERS",
+  version: 1,
+  builder: (endpoint: GenTestEndpoint, config: TemplateConfig) => {
+    const requiredHeaders = [
+      { name: "X-Content-Type-Options", value: "nosniff" },
+      { name: "X-Frame-Options", value: "DENY" },
+      { name: "X-XSS-Protection", value: "1; mode=block" },
+      { name: "Strict-Transport-Security", pattern: /max-age=/ },
+    ]
+
+    const builder = new TestBuilder()
+      .setMeta({
+        name: `${endpoint.path} Security Headers`,
+        severity: "MEDIUM",
+        tags: ["SECURITY_HEADERS"],
+      })
+      .addTestStep(
+        TestStepBuilder.sampleRequest(endpoint, config)
+          .assert({
+            key: "resp.status",
+            value: 200,
+          })
+      )
+
+    for (const header of requiredHeaders) {
+      builder.addTestStep(
+        TestStepBuilder.sampleRequest(endpoint, config)
+          .assert({
+            type: header.pattern ? "REGEXP" : "EQ",
+            key: `resp.headers['${header.name.toLowerCase()}']`,
+            value: header.pattern?.source || header.value,
+            description: `Should include ${header.name} header`,
+          })
+      )
+    }
+
+    return builder
+  },
+}
+```
+
+## Using Templates
+
+### Generate Test from Template
+
+```bash
+metlo test generate \
+  --test ./templates/rate-limit.ts \
+  --host api.example.com \
+  --endpoint /api/search \
+  --method POST \
+  --path tests/rate-limit-test.yaml
+```
+
+### Generate Without Saving
+
+Print the generated test to stdout:
+
+```bash
+metlo test generate \
+  --test ./templates/input-validation.ts \
+  --host api.example.com \
+  --endpoint /api/users \
+  --method POST
+```
+
+### Generate with Specific Version
+
+```bash
+metlo test generate \
+  --test BOLA \
+  --version 1 \
+  --host api.example.com \
+  --endpoint /api/users/123 \
+  --method GET
+```
+
+## Template Configuration
+
+The `TemplateConfig` object provides access to:
+
+- **authConfig** - Authentication configuration per host
+- **userConfig** - User credentials for testing
+- **entityMapping** - Entity ID mappings for BOLA tests
+
+```typescript
+interface TemplateConfig {
+  authConfig?: Record<string, AuthConfig>
+  userConfig?: Record<string, UserConfig>
+  // ... other configuration
+}
+```
+
+## Validation
+
+Metlo validates custom templates to ensure they:
+
+- Export a default object
+- Include `name`, `version`, and `builder` properties
+- Return a valid `TestConfig` from the builder
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Version your templates">
+    Increment version numbers when making changes:
+    
+    ```typescript
+    export default {
+      name: "CUSTOM_TEMPLATE",
+      version: 2, // Incremented from 1
+      builder: (endpoint, config) => {
+        // Updated logic
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use descriptive names">
+    Choose clear template names that indicate what they test:
+    
+    ```typescript
+    name: "API_RATE_LIMITING"
+    name: "SENSITIVE_DATA_EXPOSURE"
+    name: "CORS_MISCONFIGURATION"
+    ```
+  </Accordion>
+
+  <Accordion title="Add detailed assertions">
+    Include descriptions to make failures clear:
+    
+    ```typescript
+    .assert({
+      type: "EQ",
+      key: "resp.status",
+      value: 403,
+      description: "Non-admin users should be denied access",
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Handle missing configuration gracefully">
+    Check for required configuration and throw helpful errors:
+    
+    ```typescript
+    if (!endpoint.authConfig) {
+      throw new Error(
+        `No auth config defined for host: "${endpoint.host}". ` +
+        `Add authentication configuration to use this template.`
+      )
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use TypeScript for better type safety">
+    TypeScript catches errors before runtime:
+    
+    ```bash
+    # templates/custom-auth.ts instead of custom-auth.js
+    touch templates/custom-auth.ts
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Sharing Templates
+
+Share templates with your team:
+
+1. **Version Control** - Commit templates to your repository
+2. **NPM Package** - Publish as an npm package for easy distribution
+3. **Documentation** - Document what each template tests and when to use it
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Writing Tests" icon="pen" href="/testing/writing-tests">
+    Learn the YAML test format in detail
+  </Card>
+  <Card title="Running Tests" icon="play" href="/testing/running-tests">
+    Execute your generated tests
+  </Card>
+</CardGroup>

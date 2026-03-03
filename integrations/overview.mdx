@@ -1,0 +1,66 @@
+---
+title: Integration Overview
+description: Connect Metlo to your API infrastructure for comprehensive security monitoring
+---
+
+Metlo provides native integrations for popular web frameworks and cloud platforms, making it easy to monitor your API traffic and detect security vulnerabilities.
+
+## Framework Integrations
+
+Metlo supports direct integration with the following frameworks through lightweight middleware:
+
+### Node.js
+- **Express** - Most popular Node.js web framework
+- **Koa** - Modern async-based framework
+- **Fastify** - High-performance framework
+
+### Python
+- **Django** - Full-featured web framework
+- **Flask** - Lightweight microframework
+
+### Java
+- **Spring** - Enterprise Java framework
+- **Spring Reactive** - Reactive programming support
+
+### Go
+- **Gin** - Fast HTTP framework
+- **Gorilla** - Powerful toolkit for web applications
+
+## Traffic Mirroring
+
+For environments where you cannot modify application code, Metlo supports network-level traffic mirroring:
+
+- **AWS Traffic Mirroring** - Mirror VPC traffic from EC2, ECS, or network interfaces
+- **GCP Packet Mirroring** - Mirror traffic from GCP instances, subnets, or tags
+
+## How Integrations Work
+
+Metlo integrations work by:
+
+1. **Capturing API traffic** - Intercepting HTTP requests and responses
+2. **Extracting metadata** - Gathering headers, parameters, body data
+3. **Sending to collector** - Asynchronously transmitting data to Metlo
+4. **Analysis** - Detecting sensitive data, vulnerabilities, and anomalies
+
+All integrations are designed to have minimal performance impact on your applications.
+
+## Installation Methods
+
+<CardGroup cols={2}>
+  <Card title="Framework Middleware" icon="code" href="/integrations/node/express">
+    Install Metlo as middleware in your application code
+  </Card>
+  <Card title="Traffic Mirroring" icon="network-wired" href="/integrations/traffic-mirror/aws">
+    Mirror network traffic without code changes
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+Choose the integration that matches your technology stack:
+
+- For Node.js applications, start with [Express](/integrations/node/express), [Koa](/integrations/node/koa), or [Fastify](/integrations/node/fastify)
+- For Python applications, see [Django](/integrations/python/django) or [Flask](/integrations/python/flask)
+- For Java applications, use [Spring](/integrations/java/spring) or [Spring Reactive](/integrations/java/spring-reactive)
+- For Go applications, choose [Gin](/integrations/go/gin) or [Gorilla](/integrations/go/gorilla)
+- For cloud deployments, set up [AWS](/integrations/traffic-mirror/aws) or [GCP](/integrations/traffic-mirror/gcp) traffic mirroring

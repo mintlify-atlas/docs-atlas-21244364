@@ -1,0 +1,410 @@
+---
+title: Gorilla Integration
+description: Integrate Metlo with Gorilla Mux for Go API security monitoring
+---
+
+Metlo provides native middleware for Gorilla Mux and the standard Go HTTP server.
+
+## Installation
+
+Install the Metlo Gorilla package:
+
+```bash
+go get github.com/metlo-labs/metlo/ingestors/golang/gorilla
+go get github.com/metlo-labs/metlo/ingestors/golang/metlo
+```
+
+## Quick Start
+
+Add Metlo middleware to your Gorilla Mux application:
+
+```go
+package main
+
+import (
+    "net/http"
+    "github.com/gorilla/mux"
+    metloGorilla "github.com/metlo-labs/metlo/ingestors/golang/gorilla"
+    "github.com/metlo-labs/metlo/ingestors/golang/metlo"
+)
+
+func main() {
+    // Initialize Metlo
+    metloApp := metlo.InitMetlo(
+        "<YOUR_METLO_COLLECTOR_URL>",
+        "<YOUR_METLO_API_KEY>",
+    )
+    
+    // Create router
+    r := mux.NewRouter()
+    
+    // Add Metlo middleware
+    metloMiddleware := metloGorilla.Init(metloApp)
+    r.Use(metloMiddleware.Middleware)
+    
+    // Define routes
+    r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        w.Write([]byte(`{"message": "Hello World"}`))
+    })
+    
+    http.ListenAndServe(":8080", r)
+}
+```
+
+## Configuration
+
+### Basic Initialization
+
+The simplest setup uses default configuration:
+
+```go
+metloApp := metlo.InitMetlo(
+    "https://collector.metlo.com",
+    "your_api_key_here",
+)
+
+metloMiddleware := metloGorilla.Init(metloApp)
+r.Use(metloMiddleware.Middleware)
+```
+
+### Custom Initialization
+
+For advanced configuration, use `CustomInit`:
+
+```go
+metloApp := metlo.InitMetlo(
+    "https://collector.metlo.com",
+    "your_api_key_here",
+)
+
+metloMiddleware := metloGorilla.CustomInit(
+    metloApp,
+    "api.example.com",  // Server host
+    8080,                // Server port
+    getUserFunc,         // Optional user extraction function
+)
+
+r.Use(metloMiddleware.Middleware)
+```
+
+<ParamField path="app" type="metloApp" required>
+  Initialized Metlo application instance
+</ParamField>
+
+<ParamField path="serverHost" type="string" default="localhost">
+  The hostname of your server for trace metadata
+</ParamField>
+
+<ParamField path="serverPort" type="int" default="0">
+  The port your server is listening on
+</ParamField>
+
+<ParamField path="getUser" type="func(*http.Request) *string" default="nil">
+  Optional function to extract user identifier from request
+</ParamField>
+
+## User Tracking
+
+Extract user information from requests:
+
+```go
+func getUserFromRequest(r *http.Request) *string {
+    // Extract from JWT, session, header, etc.
+    userID := r.Header.Get("X-User-ID")
+    if userID == "" {
+        return nil
+    }
+    return &userID
+}
+
+metloMiddleware := metloGorilla.CustomInit(
+    metloApp,
+    "api.example.com",
+    8080,
+    getUserFromRequest,
+)
+```
+
+## How It Works
+
+The Gorilla middleware:
+
+1. **Wraps response writer** - Custom writer captures status code and body
+2. **Reads request body** - Captures and restores request body
+3. **Rate limiting** - Checks if request should be traced
+4. **Blocking** - Can block requests based on security rules
+5. **Calls next handler** - Your handler executes normally
+6. **Asynchronous transmission** - Sends traces to Metlo in goroutine
+
+### Request Blocking
+
+Metlo can block malicious requests:
+
+```go
+if m.app.ShouldBlock(request, meta) {
+    logRespWriter.statusCode = 403
+    logRespWriter.WriteHeader(http.StatusForbidden)
+    logRespWriter.Write([]byte("Forbidden"))
+    return
+}
+```
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers
+- Request body (up to 10KB)
+- Source IP and port
+- User identifier (if configured)
+
+**Response:**
+- Status code (defaults to 200 if not set)
+- Headers
+- Response body (up to 10KB)
+
+**Metadata:**
+- Source IP and port
+- Destination host and port
+- Environment: `production`
+- Source identifier: `go/gorilla`
+
+## Full Example Application
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "log"
+    "net/http"
+    "os"
+    
+    "github.com/gorilla/mux"
+    metloGorilla "github.com/metlo-labs/metlo/ingestors/golang/gorilla"
+    "github.com/metlo-labs/metlo/ingestors/golang/metlo"
+)
+
+type User struct {
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+func getUserFromRequest(r *http.Request) *string {
+    // Extract from Authorization header, session, etc.
+    authHeader := r.Header.Get("Authorization")
+    if authHeader != "" {
+        // Parse token and extract user ID
+        // This is a simplified example
+        return &authHeader
+    }
+    return nil
+}
+
+func getUsersHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "users": []User{},
+    })
+}
+
+func createUserHandler(w http.ResponseWriter, r *http.Request) {
+    var user User
+    
+    if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": err.Error(),
+        })
+        return
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success": true,
+        "user":    user,
+    })
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(`{"status": "healthy"}`))
+}
+
+func main() {
+    // Initialize Metlo
+    metloApp := metlo.InitMetlo(
+        os.Getenv("METLO_COLLECTOR_URL"),
+        os.Getenv("METLO_API_KEY"),
+    )
+    
+    // Create router
+    r := mux.NewRouter()
+    
+    // Add Metlo middleware
+    metloMiddleware := metloGorilla.CustomInit(
+        metloApp,
+        os.Getenv("SERVER_HOST"),
+        8080,
+        getUserFromRequest,
+    )
+    r.Use(metloMiddleware.Middleware)
+    
+    // API routes
+    api := r.PathPrefix("/api").Subrouter()
+    api.HandleFunc("/users", getUsersHandler).Methods("GET")
+    api.HandleFunc("/users", createUserHandler).Methods("POST")
+    
+    // Health check
+    r.HandleFunc("/health", healthHandler).Methods("GET")
+    
+    // Start server
+    log.Println("Server starting on :8080")
+    log.Fatal(http.ListenAndServe(":8080", r))
+}
+```
+
+## Using with Standard HTTP
+
+Metlo Gorilla middleware works with standard Go HTTP server without Gorilla Mux:
+
+```go
+package main
+
+import (
+    "net/http"
+    metloGorilla "github.com/metlo-labs/metlo/ingestors/golang/gorilla"
+    "github.com/metlo-labs/metlo/ingestors/golang/metlo"
+)
+
+func main() {
+    metloApp := metlo.InitMetlo(
+        "https://collector.metlo.com",
+        "your_api_key_here",
+    )
+    
+    metloMiddleware := metloGorilla.Init(metloApp)
+    
+    // Wrap your handler with Metlo middleware
+    http.Handle("/", metloMiddleware.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Hello World"))
+    })))
+    
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+## Status Code Handling
+
+If your handler doesn't explicitly call `WriteHeader()`, the response writer defaults to 200:
+
+```go
+statusCode := logRespWriter.statusCode
+if statusCode == 0 {
+    statusCode = 200
+}
+```
+
+## Body Size Limits
+
+Metlo captures up to 10KB of request and response bodies:
+
+```go
+const MAX_BODY int = 10 * 1024  // 10KB
+```
+
+Larger bodies are automatically truncated.
+
+## Environment Variables
+
+Example using environment variables:
+
+```go
+import "os"
+
+func main() {
+    metloApp := metlo.InitMetlo(
+        os.Getenv("METLO_COLLECTOR_URL"),
+        os.Getenv("METLO_API_KEY"),
+    )
+    
+    metloMiddleware := metloGorilla.CustomInit(
+        metloApp,
+        os.Getenv("SERVER_HOST"),
+        8080,
+        nil,
+    )
+    
+    r := mux.NewRouter()
+    r.Use(metloMiddleware.Middleware)
+    
+    // ... routes ...
+    
+    http.ListenAndServe(":8080", r)
+}
+```
+
+Set environment variables:
+
+```bash
+export METLO_COLLECTOR_URL="https://collector.metlo.com"
+export METLO_API_KEY="your_api_key_here"
+export SERVER_HOST="api.example.com"
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Middleware not capturing requests">
+    Verify:
+    - Middleware is added with `r.Use(metloMiddleware.Middleware)`
+    - Middleware is added before route handlers
+    - Metlo app is initialized correctly
+    - Collector URL is accessible
+  </Accordion>
+
+  <Accordion title="Source port detection failed">
+    You may see "Metlo couldn't find source port" in logs. This is a warning and won't prevent trace collection. The source port field will be missing from traces.
+  </Accordion>
+
+  <Accordion title="Request body consumed">
+    Metlo reads and restores the request body. If you're reading `r.Body` before the middleware runs, ensure Metlo middleware is first in the chain.
+  </Accordion>
+
+  <Accordion title="Response not captured">
+    Ensure you're writing responses through the provided `ResponseWriter`. Metlo wraps this writer to capture data.
+  </Accordion>
+</AccordionGroup>
+
+## Middleware Order
+
+Middleware executes in the order it's added. Place Metlo middleware early to capture all requests:
+
+```go
+r.Use(metloMiddleware.Middleware)  // First
+r.Use(loggingMiddleware)           // Second
+r.Use(authMiddleware)              // Third
+// ... route handlers
+```
+
+## Requirements
+
+- Go >= 1.11
+- Optional: Gorilla Mux (works with standard library too)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Discovery" icon="radar" href="/features/endpoint-discovery">
+    View your discovered Gorilla APIs
+  </Card>
+  <Card title="Gin Integration" icon="code" href="/integrations/go/gin">
+    Use Metlo with Gin framework
+  </Card>
+</CardGroup>

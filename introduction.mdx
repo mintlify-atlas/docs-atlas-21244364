@@ -1,0 +1,152 @@
+---
+title: Introduction to Metlo
+description: Open-source API security platform that detects attacks in real time, automatically blocks malicious actors, and creates comprehensive API inventories
+---
+
+<img src="https://storage.googleapis.com/metlo-security-public-images/metlo_logo_horiz%404x.png" alt="Metlo Logo" />
+
+# Secure Your API
+
+Metlo is an open-source API security platform you can set up in **under 15 minutes** that inventories your endpoints, detects bad actors, and blocks malicious traffic in real time.
+
+API security breaches have increased by **200% in the last year alone**, affecting companies like Uber, Meta, and Experian. Metlo provides enterprise-grade API security that you can self-host and get started with for free.
+
+## Key Capabilities
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Attack Detection" icon="shield-halved">
+    Passively monitor API traffic and tag malicious requests using patterns trained on known attack vectors
+  </Card>
+  <Card title="Automatic Blocking" icon="ban">
+    Cloud detection engine identifies bad actors and blocks malicious requests at the agent level in real time
+  </Card>
+  <Card title="API Discovery" icon="radar">
+    Automatically scan network traffic to create a complete inventory of every API endpoint
+  </Card>
+  <Card title="Sensitive Data Scanning" icon="lock">
+    Detect PII data in endpoints and assign risk scores based on data sensitivity
+  </Card>
+</CardGroup>
+
+## Why Metlo?
+
+Most API security solutions require lengthy sales processes or force you to send traffic to third-party clouds. **Metlo is the first open-source API security platform** that you can:
+
+- **Self-host** on your own infrastructure
+- **Deploy** in under 15 minutes
+- **Start using** for free right away
+- **Scale** to protect all your APIs
+
+## Quick Links
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Metlo running with Docker in under 5 minutes
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand how Metlo components work together
+  </Card>
+  <Card title="Security Testing" icon="vial">
+    Build tests for OWASP Top 10 vulnerabilities
+  </Card>
+  <Card title="Deploy to Production" icon="server">
+    Deploy to AWS, GCP, or Azure
+  </Card>
+</CardGroup>
+
+## Core Features
+
+### Endpoint Discovery
+
+Metlo automatically scans network traffic and creates an inventory of every API endpoint in your infrastructure. No manual configuration required.
+
+### Attack Detection & Context
+
+Our detection models are built on patterns of malicious requests to identify:
+- SQL Injection attempts
+- Broken Object Level Authorization (BOLA)
+- Broken Authentication
+- Cross-Site Scripting (XSS)
+- API-specific attacks
+
+The UI provides full context around any attack to help you quickly fix vulnerabilities.
+
+### API Security Testing
+
+<Info>
+Build security tests directly in Metlo with auto-generated tests for OWASP Top 10 vulnerabilities.
+</Info>
+
+For tests that can't be auto-generated, use our built-in YAML testing framework to achieve **100% security coverage** on your highest-risk APIs:
+
+```yaml
+id: test-payment-processor-metlo.com-user-billing
+
+meta:
+  name: test-payment-processor.metlo.com/user/billing Test Auth
+  severity: CRITICAL
+  tags:
+    - BROKEN_AUTHENTICATION
+
+test:
+  - request:
+      method: POST
+      url: https://test-payment-processor.metlo.com/user/billing
+      headers:
+        - name: Content-Type
+          value: application/json
+        - name: Authorization
+          value: Bearer <token>
+      data: |-
+        { "ccn": "4111111111111111", "cc_exp": "12/25", "cc_code": "123" }
+    assert:
+      - key: resp.status
+        value: 200
+  - request:
+      method: POST
+      url: https://test-payment-processor.metlo.com/user/billing
+      headers:
+        - name: Content-Type
+          value: application/json
+      data: |-
+        { "ccn": "4111111111111111", "cc_exp": "12/25", "cc_code": "123" }
+    assert:
+      - key: resp.status
+        value: [ 401, 403 ]
+```
+
+### CI/CD Integration
+
+Integrate Metlo with your CI/CD pipeline to find security issues in development and staging environments before they reach production.
+
+## Open Source & Enterprise
+
+<Note>
+This repository is entirely **MIT licensed**. Features like advanced user management, user roles, and attack protection require an enterprise license.
+</Note>
+
+The core Metlo platform is completely free and open source. For enterprise features, [contact us](mailto:shri@metlo.com) for more information.
+
+## Language Support
+
+Metlo provides ingestors for multiple languages and frameworks:
+
+- **Node.js** - Express, Koa, Fastify
+- **Python** - Flask, Django, FastAPI
+- **Go** - Standard library, popular frameworks
+- **Java** - Spring Boot, Jakarta EE
+- **Kubernetes** - DAPR integration
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Quick Start" icon="play" href="/quickstart">
+    Deploy locally with Docker
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Learn system components
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/metlo-labs/metlo">
+    View source code
+  </Card>
+</CardGroup>

@@ -1,0 +1,286 @@
+---
+title: Django Integration
+description: Integrate Metlo with Django for comprehensive API security monitoring
+---
+
+Metlo's Python agent provides native Django middleware for capturing API traffic.
+
+## Installation
+
+Install Metlo from PyPI:
+
+```bash
+pip install metlo
+```
+
+## Quick Start
+
+<Steps>
+  <Step title="Add middleware">
+    Add Metlo's middleware to your `MIDDLEWARE` list in `settings.py`:
+
+    ```python
+    MIDDLEWARE = [
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.common.CommonMiddleware',
+        # ... other middleware
+        'metlo.django.MetloDjango',  # Add this line
+    ]
+    ```
+
+    <Note>
+    The middleware can be placed anywhere in the list, but placing it last ensures it captures the final response.
+    </Note>
+  </Step>
+
+  <Step title="Configure Metlo">
+    Add a `METLO_CONFIG` dictionary to your `settings.py`:
+
+    ```python
+    METLO_CONFIG = {
+        "API_KEY": "<YOUR_METLO_API_KEY>",
+        "METLO_HOST": "<YOUR_METLO_COLLECTOR_URL>"
+    }
+    ```
+  </Step>
+
+  <Step title="Run your application">
+    Start your Django development server or production application:
+
+    ```bash
+    python manage.py runserver
+    ```
+
+    Metlo will now capture all incoming API requests.
+  </Step>
+</Steps>
+
+## Configuration
+
+### Required Settings
+
+<ParamField path="API_KEY" type="string" required>
+  Your Metlo API key for authentication with the collector
+</ParamField>
+
+<ParamField path="METLO_HOST" type="string" required>
+  The URL of your Metlo collector instance (e.g., `https://collector.metlo.com`)
+  
+  Must be a valid HTTP or HTTPS URL.
+</ParamField>
+
+### Optional Settings
+
+<ParamField path="workers" type="integer" default="4">
+  Maximum number of worker threads for asynchronous communication with Metlo
+</ParamField>
+
+<ParamField path="DISABLED" type="boolean" default="false">
+  Disable Metlo middleware without removing it from settings
+</ParamField>
+
+### Example Configuration
+
+```python
+METLO_CONFIG = {
+    "API_KEY": "metlo_api_key_abc123",
+    "METLO_HOST": "https://collector.metlo.com",
+    "workers": 8,  # Increase workers for high-traffic applications
+    "DISABLED": False,
+}
+```
+
+## How It Works
+
+The Django middleware:
+
+1. **Processes each request** - Django calls the middleware for every incoming request
+2. **Captures request data** - Headers, body, query parameters, method
+3. **Calls view** - Your view function executes normally
+4. **Captures response data** - Status code, headers, response body
+5. **Asynchronous transmission** - Sends data to Metlo using ThreadPoolExecutor
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query/POST parameters)
+- HTTP method
+- Headers
+- Request body (decoded as UTF-8)
+- Source IP and port
+
+**Response:**
+- Status code
+- Headers
+- Response body (decoded as UTF-8)
+- Destination IP and port
+
+**Metadata:**
+- Environment: `production`
+- Source identifier: `python/django`
+- Request/response timestamp
+
+## Example Django Project
+
+### settings.py
+
+```python
+from pathlib import Path
+import os
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = 'django-insecure-key'
+
+DEBUG = True
+
+ALLOWED_HOSTS = []
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'myapp',
+]
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'metlo.django.MetloDjango',
+]
+
+# Metlo Configuration
+METLO_CONFIG = {
+    "API_KEY": os.getenv("METLO_API_KEY"),
+    "METLO_HOST": os.getenv("METLO_COLLECTOR_URL", "https://collector.metlo.com"),
+    "workers": 4,
+}
+```
+
+### views.py
+
+```python
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+import json
+
+@require_http_methods(["GET", "POST"])
+def user_api(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            # Process user data
+            return JsonResponse({
+                "success": True,
+                "user": data
+            })
+        except json.JSONDecodeError:
+            return JsonResponse({
+                "error": "Invalid JSON"
+            }, status=400)
+    else:
+        return JsonResponse({
+            "users": []
+        })
+```
+
+## Environment Variables
+
+For security, use environment variables for sensitive configuration:
+
+```python
+import os
+
+METLO_CONFIG = {
+    "API_KEY": os.environ.get("METLO_API_KEY"),
+    "METLO_HOST": os.environ.get("METLO_HOST", "https://collector.metlo.com"),
+}
+```
+
+Then set them in your environment:
+
+```bash
+export METLO_API_KEY="your_api_key_here"
+export METLO_HOST="https://collector.metlo.com"
+```
+
+## Django REST Framework
+
+Metlo works seamlessly with Django REST Framework:
+
+```python
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+@api_view(['GET', 'POST'])
+def api_endpoint(request):
+    if request.method == 'POST':
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+    
+    users = User.objects.all()
+    serializer = UserSerializer(users, many=True)
+    return Response(serializer.data)
+```
+
+Metlo automatically captures all DRF request and response data.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Middleware not capturing requests">
+    Verify that:
+    - `metlo.django.MetloDjango` is in your `MIDDLEWARE` list
+    - `METLO_CONFIG` is properly defined in `settings.py`
+    - Both `API_KEY` and `METLO_HOST` are set
+    - Check Django logs for Metlo warnings
+  </Accordion>
+
+  <Accordion title="Invalid host scheme error">
+    Ensure `METLO_HOST` starts with `http://` or `https://`. Example: `https://collector.metlo.com`
+  </Accordion>
+
+  <Accordion title="Missing configuration error">
+    If you see "METLO_CONFIG is missing..." errors, check that your `settings.py` includes both `API_KEY` and `METLO_HOST` in the `METLO_CONFIG` dictionary.
+  </Accordion>
+
+  <Accordion title="Source port detection">
+    The middleware attempts multiple methods to detect the source port. In some deployment scenarios (e.g., behind proxies), this may not be available.
+  </Accordion>
+</AccordionGroup>
+
+## Performance Considerations
+
+- **ThreadPoolExecutor** - Metlo uses Python's `ThreadPoolExecutor` for asynchronous communication
+- **Non-blocking** - Request/response processing is not blocked by Metlo
+- **Configurable workers** - Adjust the `workers` setting based on your traffic volume
+
+## Requirements
+
+- Python >= 3.6
+- Django >= 2.0
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Discovery" icon="magnifying-glass" href="/features/endpoint-discovery">
+    View your automatically discovered Django APIs
+  </Card>
+  <Card title="Sensitive Data" icon="shield" href="/features/sensitive-data-scanning">
+    Detect PII and sensitive data in your APIs
+  </Card>
+</CardGroup>

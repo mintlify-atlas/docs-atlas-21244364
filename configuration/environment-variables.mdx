@@ -1,0 +1,276 @@
+---
+title: "Environment Variables"
+description: "Complete reference for Metlo environment variables"
+---
+
+Metlo uses environment variables to configure services across the backend, ingestor, jobs, analyzer, and frontend containers.
+
+## Managing Environment Variables
+
+Environment variables are typically stored in a `.env` file in your Metlo installation directory (default: `/opt/metlo/.env`).
+
+The `manage-deployment.py` script automatically generates required secrets during initialization:
+
+```bash
+python3 manage-deployment.py init
+```
+
+## Core Configuration
+
+### LICENSE_KEY
+
+<ParamField path="LICENSE_KEY" type="string">
+  Your Metlo license key. Optional for community edition.
+</ParamField>
+
+**Used by:** backend, ingestor, jobs, analyzer
+
+**Required:** No
+
+```bash
+LICENSE_KEY="your-license-key-here"
+```
+
+### ENCRYPTION_KEY
+
+<ParamField path="ENCRYPTION_KEY" type="string" required>
+  Base64-encoded 32-byte encryption key for securing sensitive data in the database.
+</ParamField>
+
+**Used by:** backend, ingestor, analyzer
+
+**Required:** Yes
+
+<Warning>
+This key is auto-generated during initialization. Never commit this to version control. Losing this key will make encrypted data unrecoverable.
+</Warning>
+
+```bash
+ENCRYPTION_KEY="base64-encoded-key-here"
+```
+
+## Database Configuration
+
+### DB_URL
+
+<ParamField path="DB_URL" type="string" required>
+  PostgreSQL connection string.
+</ParamField>
+
+**Used by:** backend, ingestor, jobs, analyzer
+
+**Required:** Yes
+
+**Default:** `postgres://postgres:postgres@db:5432/metlo_api_security`
+
+```bash
+DB_URL="postgres://postgres:postgres@db:5432/metlo_api_security"
+```
+
+### REDIS_URL
+
+<ParamField path="REDIS_URL" type="string" required>
+  Redis connection string for caching and job queues.
+</ParamField>
+
+**Used by:** backend, ingestor, jobs, analyzer
+
+**Required:** Yes
+
+**Default:** `redis://:eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81@cache:6379`
+
+```bash
+REDIS_URL="redis://:your-password@cache:6379"
+```
+
+## Backend Configuration
+
+### BACKEND_URL
+
+<ParamField path="BACKEND_URL" type="string" required>
+  Public URL where the Metlo backend is accessible.
+</ParamField>
+
+**Used by:** backend, frontend
+
+**Required:** Yes
+
+```bash
+BACKEND_URL="http://your-server-ip:8080"
+```
+
+### EXPRESS_SECRET
+
+<ParamField path="EXPRESS_SECRET" type="string" required>
+  Secret key for Express.js session signing.
+</ParamField>
+
+**Used by:** backend
+
+**Required:** Yes
+
+<Warning>
+This secret is auto-generated during initialization. Keep it secure and consistent across deployments.
+</Warning>
+
+```bash
+EXPRESS_SECRET="random-32-character-string"
+```
+
+### SESSION_SECRET
+
+<ParamField path="SESSION_SECRET" type="string" required>
+  Secret for session management. Typically set to the same value as EXPRESS_SECRET.
+</ParamField>
+
+**Used by:** backend
+
+**Required:** Yes
+
+```bash
+SESSION_SECRET="random-32-character-string"
+```
+
+## Service Configuration
+
+### RUN_MIGRATION
+
+<ParamField path="RUN_MIGRATION" type="boolean" default="true">
+  Automatically run database migrations on startup.
+</ParamField>
+
+**Used by:** ingestor
+
+**Required:** No
+
+```bash
+RUN_MIGRATION="true"
+```
+
+### NUM_WORKERS
+
+<ParamField path="NUM_WORKERS" type="number" default="1">
+  Number of worker processes for the analyzer service.
+</ParamField>
+
+**Used by:** analyzer
+
+**Required:** No
+
+```bash
+NUM_WORKERS="4"
+```
+
+<Note>
+Increase this value on multi-core systems to improve analysis throughput. Recommended: 1 worker per 2 CPU cores.
+</Note>
+
+### SANDBOX_MODE
+
+<ParamField path="SANDBOX_MODE" type="boolean" default="false">
+  Enable sandbox mode for testing without affecting production data.
+</ParamField>
+
+**Used by:** backend
+
+**Required:** No
+
+```bash
+SANDBOX_MODE="false"
+```
+
+### DISABLE_LOGGING_STATS
+
+<ParamField path="DISABLE_LOGGING_STATS" type="boolean" default="false">
+  Disable anonymous usage statistics logging.
+</ParamField>
+
+**Used by:** jobs
+
+**Required:** No
+
+```bash
+DISABLE_LOGGING_STATS="false"
+```
+
+## Docker Configuration
+
+### DOCKER_IMAGE_TAG
+
+<ParamField path="DOCKER_IMAGE_TAG" type="string" default="latest">
+  Docker image tag to use for Metlo services.
+</ParamField>
+
+**Used by:** docker-compose
+
+**Required:** No
+
+```bash
+DOCKER_IMAGE_TAG="v0.20.0"
+```
+
+## Complete Example
+
+Here's a complete `.env` file example:
+
+```bash
+# License
+LICENSE_KEY=""
+
+# Security
+ENCRYPTION_KEY="c29tZS1yYW5kb20tYmFzZTY0LWVuY29kZWQta2V5"
+EXPRESS_SECRET="a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+SESSION_SECRET="a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+
+# Database
+DB_URL="postgres://postgres:postgres@db:5432/metlo_api_security"
+REDIS_URL="redis://:eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81@cache:6379"
+
+# Backend
+BACKEND_URL="http://192.168.1.100:8080"
+
+# Service Configuration
+RUN_MIGRATION="true"
+NUM_WORKERS="2"
+SANDBOX_MODE="false"
+DISABLE_LOGGING_STATS="false"
+
+# Docker
+DOCKER_IMAGE_TAG="latest"
+```
+
+## Environment Variable Priority
+
+Environment variables are loaded in the following order:
+
+1. System environment variables
+2. `.env` file in the Metlo directory
+3. Docker Compose environment section
+4. Default values
+
+## Security Best Practices
+
+<Warning>
+**Never commit `.env` files to version control.** Add `.env` to your `.gitignore` file.
+</Warning>
+
+- Use strong, randomly generated values for all secrets
+- Rotate `ENCRYPTION_KEY` and `EXPRESS_SECRET` periodically
+- Restrict file permissions on `.env`: `chmod 600 .env`
+- Use different secrets for development and production environments
+- Back up your `.env` file securely
+
+## Viewing Current Configuration
+
+To verify your environment configuration:
+
+```bash
+cd /opt/metlo
+cat .env
+```
+
+To check running container environment:
+
+```bash
+docker exec metlo-backend env | grep -E '(DB_URL|REDIS_URL|BACKEND_URL)'
+```

@@ -1,0 +1,520 @@
+---
+title: "Azure Deployment"
+description: "Deploy Metlo API Security on Microsoft Azure using ARM templates"
+---
+
+## Overview
+
+Deploy Metlo on Microsoft Azure using Azure Resource Manager (ARM) templates. This guide covers deploying Metlo as a virtual machine in your Azure subscription.
+
+## Prerequisites
+
+- Azure subscription with active billing
+- Azure CLI installed (optional, for CLI deployment)
+- SSH public key for VM access
+- Resource group created (or will be created during deployment)
+
+## Deployment Methods
+
+<Tabs>
+  <Tab title="Azure Portal">
+    ### Deploy via Azure Portal
+
+    <Steps>
+      <Step title="Access ARM Template">
+        Download the Metlo ARM template:
+
+        ```bash
+        wget https://raw.githubusercontent.com/metlo-labs/metlo/master/deploy/azure/deployment.json
+        ```
+
+        Or access it directly from the GitHub repository.
+      </Step>
+
+      <Step title="Create Custom Deployment">
+        1. Navigate to [Azure Portal](https://portal.azure.com)
+        2. Search for "Deploy a custom template"
+        3. Click "Build your own template in the editor"
+        4. Paste the contents of `deployment.json` or upload the file
+        5. Click "Save"
+      </Step>
+
+      <Step title="Configure Parameters">
+        Provide the following parameters:
+
+        <ParamField path="Subscription" type="string" required>
+          Select your Azure subscription
+        </ParamField>
+
+        <ParamField path="Resource Group" type="string" required>
+          Create new or select existing resource group
+        </ParamField>
+
+        <ParamField path="Region" type="string" required>
+          Select the Azure region for deployment (default: resource group location)
+        </ParamField>
+
+        <ParamField path="VM Name" type="string" default="Metlo-Manager">
+          Name for the Metlo virtual machine
+        </ParamField>
+
+        <ParamField path="Admin Password or Key" type="string" required>
+          SSH public key for accessing the VM (recommended over password)
+        </ParamField>
+      </Step>
+
+      <Step title="Review and Create">
+        1. Review all configuration settings
+        2. Accept the terms and conditions
+        3. Click "Create" to start the deployment
+        4. Wait approximately 15-20 minutes for deployment to complete
+      </Step>
+
+      <Step title="Access Deployment Outputs">
+        After deployment completes, navigate to the deployment outputs:
+        1. Go to Resource Group → Deployments
+        2. Click on the deployment name
+        3. View "Outputs" tab for:
+           - Hostname (FQDN)
+           - SSH command
+           - Admin username
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Azure CLI">
+    ### Deploy via Azure CLI
+
+    <Steps>
+      <Step title="Login to Azure">
+        Authenticate with Azure:
+
+        ```bash
+        az login
+        ```
+      </Step>
+
+      <Step title="Set subscription">
+        Set the active subscription:
+
+        ```bash
+        az account set --subscription "YOUR_SUBSCRIPTION_ID"
+        ```
+      </Step>
+
+      <Step title="Create resource group">
+        Create a resource group (skip if using existing):
+
+        ```bash
+        az group create \
+          --name metlo-rg \
+          --location eastus
+        ```
+      </Step>
+
+      <Step title="Download ARM template">
+        ```bash
+        wget https://raw.githubusercontent.com/metlo-labs/metlo/master/deploy/azure/deployment.json
+        ```
+      </Step>
+
+      <Step title="Create parameters file">
+        Create a `parameters.json` file:
+
+        ```json
+        {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "vmName": {
+              "value": "Metlo-Manager"
+            },
+            "adminPasswordOrKey": {
+              "value": "ssh-rsa AAAAB3NzaC1yc2E... your-public-key"
+            },
+            "location": {
+              "value": "eastus"
+            }
+          }
+        }
+        ```
+      </Step>
+
+      <Step title="Deploy template">
+        ```bash
+        az deployment group create \
+          --name metlo-deployment \
+          --resource-group metlo-rg \
+          --template-file deployment.json \
+          --parameters parameters.json
+        ```
+      </Step>
+
+      <Step title="Get deployment outputs">
+        ```bash
+        az deployment group show \
+          --name metlo-deployment \
+          --resource-group metlo-rg \
+          --query properties.outputs
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="PowerShell">
+    ### Deploy via PowerShell
+
+    <Steps>
+      <Step title="Connect to Azure">
+        ```powershell
+        Connect-AzAccount
+        ```
+      </Step>
+
+      <Step title="Set subscription context">
+        ```powershell
+        Set-AzContext -SubscriptionId "YOUR_SUBSCRIPTION_ID"
+        ```
+      </Step>
+
+      <Step title="Create resource group">
+        ```powershell
+        New-AzResourceGroup -Name "metlo-rg" -Location "eastus"
+        ```
+      </Step>
+
+      <Step title="Deploy ARM template">
+        ```powershell
+        New-AzResourceGroupDeployment `
+          -ResourceGroupName "metlo-rg" `
+          -TemplateUri "https://raw.githubusercontent.com/metlo-labs/metlo/master/deploy/azure/deployment.json" `
+          -vmName "Metlo-Manager" `
+          -adminPasswordOrKey "ssh-rsa AAAAB3NzaC1yc2E... your-public-key"
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Resource Details
+
+### Virtual Machine
+
+<ParamField path="VM Size" type="string" default="Standard_B2s">
+  - 2 vCPUs
+  - 4 GB RAM
+  - Burstable performance tier
+  - Suitable for small to medium production workloads
+</ParamField>
+
+<ParamField path="Operating System" type="string" default="Ubuntu Server 18.04 LTS">
+  Latest Ubuntu 18.04 LTS image from Canonical
+</ParamField>
+
+<ParamField path="OS Disk" type="string" default="Standard_LRS">
+  - Standard HDD Locally Redundant Storage
+  - 30GB disk size
+  - Upgrade to Premium_LRS for better performance
+</ParamField>
+
+### Networking
+
+The deployment creates:
+
+- **Virtual Network** (`metloVNet`): 10.1.0.0/16 address space
+- **Subnet** (`metloSubnet`): 10.1.0.0/24 address prefix  
+- **Public IP Address**: Dynamic allocation with DNS label
+- **Network Interface**: Connected to subnet with public IP
+- **Network Security Group**: With configured security rules
+
+### Network Security Group Rules
+
+The template creates the following inbound security rules:
+
+| Priority | Name | Port | Protocol | Source | Description |
+|----------|------|------|----------|--------|-------------|
+| 1000 | MetloSSH | 22 | TCP | * | SSH access |
+| 1001 | Metlo-Collector-10-8 | 8081 | TCP | 10.0.0.0/8 | Collector from private network |
+| 1002 | Metlo-Collector-172.16-12 | 8000 | TCP | 172.16.0.0/12 | UI from private network |
+| 1003 | Metlo-Collector-192.168-16 | 8000 | TCP | 192.168.0.0/16 | UI from private network |
+
+<Warning>
+  The default configuration allows SSH access from any IP address (0.0.0.0/0). For production deployments:
+  1. Restrict SSH access to specific IP ranges
+  2. Consider using Azure Bastion for SSH access
+  3. Add rules for ports 8000, 8080, and 8081 as needed
+</Warning>
+
+## Post-Deployment Configuration
+
+### Retrieve Connection Information
+
+The deployment outputs provide:
+
+<CodeGroup>
+```bash Get Hostname (CLI)
+az deployment group show \
+  --name metlo-deployment \
+  --resource-group metlo-rg \
+  --query properties.outputs.hostname.value -o tsv
+```
+
+```bash Get SSH Command (CLI)
+az deployment group show \
+  --name metlo-deployment \
+  --resource-group metlo-rg \
+  --query properties.outputs.sshCommand.value -o tsv
+```
+
+```powershell Get Outputs (PowerShell)
+(Get-AzResourceGroupDeployment -ResourceGroupName "metlo-rg" -Name "metlo-deployment").Outputs
+```
+</CodeGroup>
+
+### SSH Access
+
+Connect using the SSH command from outputs:
+
+```bash
+ssh azureuser@your-vm-hostname.eastus.cloudapp.azure.com
+```
+
+Or use the private key if specified:
+
+```bash
+ssh -i /path/to/private-key azureuser@your-vm-hostname.eastus.cloudapp.azure.com
+```
+
+### Configure Additional NSG Rules
+
+To access Metlo UI and services externally, add NSG rules:
+
+<CodeGroup>
+```bash Allow UI Access (Port 8000)
+az network nsg rule create \
+  --resource-group metlo-rg \
+  --nsg-name metloSecGroupNet \
+  --name AllowMetloUI \
+  --priority 1100 \
+  --source-address-prefixes "YOUR_IP/32" \
+  --destination-port-ranges 8000 \
+  --protocol Tcp \
+  --access Allow
+```
+
+```bash Allow Backend API (Port 8080)
+az network nsg rule create \
+  --resource-group metlo-rg \
+  --nsg-name metloSecGroupNet \
+  --name AllowMetloBackend \
+  --priority 1101 \
+  --source-address-prefixes "YOUR_IP/32" \
+  --destination-port-ranges 8080 \
+  --protocol Tcp \
+  --access Allow
+```
+
+```bash Allow Collector (Port 8081)
+az network nsg rule create \
+  --resource-group metlo-rg \
+  --nsg-name metloSecGroupNet \
+  --name AllowMetloCollector \
+  --priority 1102 \
+  --source-address-prefixes "10.0.0.0/8" \
+  --destination-port-ranges 8081 \
+  --protocol Tcp \
+  --access Allow
+```
+</CodeGroup>
+
+### Verify Metlo Installation
+
+SSH into the VM and check the deployment status:
+
+```bash
+# Check if deployment script completed
+sudo cat /var/log/azure/custom-script/handler.log
+
+# Check Metlo services
+sudo metlo-deploy status
+
+# View Docker containers
+cd /opt/metlo
+sudo docker-compose ps
+```
+
+## Accessing Metlo
+
+Once the deployment is complete and NSG rules are configured:
+
+- **Frontend UI**: `http://YOUR_VM_FQDN:8000`
+- **Backend API**: `http://YOUR_VM_FQDN:8080`  
+- **Collector Endpoint**: `http://YOUR_VM_FQDN:8081`
+
+## Scaling Recommendations
+
+### VM Size Upgrades
+
+For production workloads, consider upgrading to:
+
+| Workload | VM Size | vCPUs | RAM | Cost/Month* |
+|----------|---------|-------|-----|-------------|
+| Small | Standard_B2s | 2 | 4 GB | ~$30 |
+| Medium | Standard_D2s_v3 | 2 | 8 GB | ~$70 |
+| Large | Standard_D4s_v3 | 4 | 16 GB | ~$140 |
+| X-Large | Standard_D8s_v3 | 8 | 32 GB | ~$280 |
+
+*Approximate costs in East US region
+
+### Storage Upgrades
+
+Upgrade to Premium SSD for better performance:
+
+```bash
+az vm deallocate --resource-group metlo-rg --name Metlo-Manager
+az vm update --resource-group metlo-rg --name Metlo-Manager \
+  --set storageProfile.osDisk.managedDisk.storageAccountType=Premium_LRS
+az vm start --resource-group metlo-rg --name Metlo-Manager
+```
+
+## Backup and Disaster Recovery
+
+### Enable Azure Backup
+
+<Steps>
+  <Step title="Create Recovery Services Vault">
+    ```bash
+    az backup vault create \
+      --resource-group metlo-rg \
+      --name metlo-backup-vault \
+      --location eastus
+    ```
+  </Step>
+
+  <Step title="Enable backup for VM">
+    ```bash
+    az backup protection enable-for-vm \
+      --resource-group metlo-rg \
+      --vault-name metlo-backup-vault \
+      --vm Metlo-Manager \
+      --policy-name DefaultPolicy
+    ```
+  </Step>
+
+  <Step title="Trigger on-demand backup">
+    ```bash
+    az backup protection backup-now \
+      --resource-group metlo-rg \
+      --vault-name metlo-backup-vault \
+      --container-name Metlo-Manager \
+      --item-name Metlo-Manager \
+      --retain-until 01-02-2026
+    ```
+  </Step>
+</Steps>
+
+### Create VM Snapshots
+
+```bash
+# Create OS disk snapshot
+az snapshot create \
+  --resource-group metlo-rg \
+  --name metlo-snapshot-$(date +%Y%m%d) \
+  --source $(az vm show -g metlo-rg -n Metlo-Manager --query storageProfile.osDisk.managedDisk.id -o tsv)
+```
+
+## Monitoring with Azure Monitor
+
+### Enable diagnostic settings
+
+```bash
+az monitor diagnostic-settings create \
+  --resource $(az vm show -g metlo-rg -n Metlo-Manager --query id -o tsv) \
+  --name metlo-diagnostics \
+  --logs '[{"category":"Administrative","enabled":true}]' \
+  --metrics '[{"category":"AllMetrics","enabled":true}]'
+```
+
+### Set up alerts
+
+```bash
+# Alert on high CPU usage
+az monitor metrics alert create \
+  --name metlo-high-cpu \
+  --resource-group metlo-rg \
+  --scopes $(az vm show -g metlo-rg -n Metlo-Manager --query id -o tsv) \
+  --condition "avg Percentage CPU > 80" \
+  --window-size 5m \
+  --evaluation-frequency 1m
+```
+
+## Cost Management
+
+<Note>
+  **Estimated monthly costs** (East US region):
+  - **VM (Standard_B2s)**: ~$30/month
+  - **OS Disk (30GB Standard HDD)**: ~$1.50/month
+  - **Public IP**: ~$3/month
+  - **Bandwidth**: Variable based on usage
+  - **Total baseline**: ~$35-40/month
+
+  Use [Azure Pricing Calculator](https://azure.microsoft.com/pricing/calculator/) for detailed estimates.
+</Note>
+
+### Cost-saving strategies:
+
+1. **Use Azure Reserved VM Instances**: Save up to 72% with 1 or 3-year reservations
+2. **Enable auto-shutdown**: Schedule VM shutdown during non-business hours
+3. **Use Spot VMs**: For non-production environments (up to 90% savings)
+4. **Right-size VMs**: Monitor metrics and adjust VM size accordingly
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Deployment fails with quota exceeded">
+    - Check your subscription's core quota limits
+    - Request quota increase: Portal → Subscriptions → Usage + quotas
+    - Try a different region or VM size
+  </Accordion>
+
+  <Accordion title="Cannot SSH into VM">
+    - Verify NSG allows port 22 from your IP
+    - Check that the VM is running: `az vm get-instance-view`
+    - Verify SSH public key was correctly specified
+    - Try password authentication if key fails (less secure)
+  </Accordion>
+
+  <Accordion title="Custom script extension failed">
+    - Check extension logs: `/var/log/azure/custom-script/handler.log`
+    - Manually run deployment script:
+      ```bash
+      wget https://raw.githubusercontent.com/metlo-labs/metlo/master/deploy/deploy_script.sh
+      chmod +x deploy_script.sh
+      sudo ./deploy_script.sh
+      ```
+  </Accordion>
+
+  <Accordion title="Cannot access Metlo UI">
+    - Verify NSG rules allow ports 8000, 8080, 8081
+    - Check that Metlo services are running: `sudo metlo-deploy status`
+    - Ensure public IP is accessible
+    - Check VM firewall: `sudo ufw status`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Data Sources" icon="plug" href="/integrations/overview">
+    Set up integrations to capture API traffic
+  </Card>
+  <Card title="Configure Alerts" icon="chart-line" href="/configuration/alerts-webhooks">
+    Set up webhook alerts
+  </Card>
+  <Card title="Environment Variables" icon="server" href="/configuration/environment-variables">
+    Configure environment settings
+  </Card>
+  <Card title="Security Configuration" icon="shield" href="/configuration/metlo-config">
+    Configure security settings
+  </Card>
+</CardGroup>

@@ -1,0 +1,231 @@
+---
+title: "metlo-config.yaml"
+description: "Configure Metlo's behavior using the metlo-config.yaml file"
+---
+
+The `metlo-config.yaml` file allows you to customize various aspects of Metlo's behavior, including trace capture, host mappings, authentication configurations, and data detection settings.
+
+## Configuration Location
+
+The configuration file is mounted into the Metlo ingestor container:
+
+```yaml
+volumes:
+  - ./metlo-config.yaml:/usr/src/app/backend/metlo-config.yaml
+```
+
+## Configuration Options
+
+### Global Trace Capture
+
+Control whether Metlo captures full request/response traces for all endpoints.
+
+<ParamField path="globalFullTraceCapture" type="boolean" default="false">
+  Enable full trace capture for all API endpoints. When enabled, Metlo stores complete request and response data for analysis.
+</ParamField>
+
+```yaml
+globalFullTraceCapture: true
+```
+
+<Warning>
+Enabling global trace capture will increase storage requirements. Use endpoint-specific capture when possible.
+</Warning>
+
+### Minimum Analyze Traces
+
+Set the minimum number of traces required before Metlo analyzes an endpoint.
+
+<ParamField path="minAnalyzeTraces" type="number" default="100">
+  Minimum number of traces collected before endpoint analysis begins.
+</ParamField>
+
+```yaml
+minAnalyzeTraces: 100
+```
+
+### Host Mapping
+
+Map internal hostnames to public-facing domains using regex patterns.
+
+<ParamField path="hostMap" type="array">
+  Array of host mapping objects that map internal hosts to external hosts using regex patterns.
+</ParamField>
+
+<ParamField path="hostMap[].host" type="string" required>
+  The target hostname to map to.
+</ParamField>
+
+<ParamField path="hostMap[].pattern" type="string" required>
+  Regular expression pattern to match against incoming hostnames.
+</ParamField>
+
+```yaml
+hostMap:
+  - host: "api.example.com"
+    pattern: "^internal-api-.*\\.prod\\.local$"
+  - host: "staging.example.com"
+    pattern: "^.*\\.staging\\.local$"
+```
+
+### Host Block List
+
+Exclude specific hosts from Metlo's monitoring.
+
+<ParamField path="hostBlockList" type="array">
+  Array of regex patterns for hosts to exclude from monitoring.
+</ParamField>
+
+```yaml
+hostBlockList:
+  - "^localhost$"
+  - "^127\\.0\\.0\\.1$"
+  - ".*\\.internal\\.local$"
+```
+
+### Path Block List
+
+Exclude specific paths on certain hosts from monitoring.
+
+<ParamField path="pathBlockList" type="array">
+  Array of path blocking rules by host.
+</ParamField>
+
+<ParamField path="pathBlockList[].host" type="string" required>
+  Regular expression pattern to match the host.
+</ParamField>
+
+<ParamField path="pathBlockList[].paths" type="array" required>
+  Array of regex patterns for paths to block on this host.
+</ParamField>
+
+```yaml
+pathBlockList:
+  - host: "api.example.com"
+    paths:
+      - "^/health$"
+      - "^/metrics$"
+      - "^/internal/.*"
+```
+
+### Authentication Configuration
+
+Define authentication schemes for your API endpoints.
+
+<ParamField path="authentication" type="array">
+  Array of authentication configuration objects.
+</ParamField>
+
+See the [Authentication](/configuration/metlo-config) documentation for detailed configuration options.
+
+```yaml
+authentication:
+  - host: "api.example.com"
+    authType: "jwt"
+    headerKey: "Authorization"
+```
+
+### Custom Words
+
+Add custom keywords to improve sensitive data detection.
+
+<ParamField path="customWords" type="array">
+  Array of custom words/patterns to enhance data classification detection.
+</ParamField>
+
+```yaml
+customWords:
+  - "customerID"
+  - "accountNumber"
+  - "secretKey"
+```
+
+### Ignored Detections
+
+Suppress specific data field detections to reduce false positives.
+
+<ParamField path="ignoredDetections" type="array">
+  Array of detection rules to ignore.
+</ParamField>
+
+<ParamField path="ignoredDetections[].host" type="string">
+  Host pattern to match.
+</ParamField>
+
+<ParamField path="ignoredDetections[].path" type="string">
+  Path pattern to match.
+</ParamField>
+
+<ParamField path="ignoredDetections[].method" type="string">
+  HTTP method (GET, POST, PUT, DELETE, etc.).
+</ParamField>
+
+<ParamField path="ignoredDetections[].ignoredPaths" type="object" required>
+  Object mapping data sections to arrays of field paths to ignore.
+</ParamField>
+
+```yaml
+ignoredDetections:
+  - host: "api.example.com"
+    path: "/users"
+    method: "GET"
+    ignoredPaths:
+      resBody:
+        - "users.*.id"
+        - "users.*.displayName"
+```
+
+## Complete Example
+
+```yaml
+# Global trace capture settings
+globalFullTraceCapture: false
+minAnalyzeTraces: 100
+
+# Host mappings
+hostMap:
+  - host: "api.example.com"
+    pattern: "^api-prod-.*\\.internal$"
+
+# Block monitoring for these hosts
+hostBlockList:
+  - "^localhost$"
+  - ".*\\.internal\\.local$"
+
+# Block specific paths
+pathBlockList:
+  - host: "api.example.com"
+    paths:
+      - "^/health$"
+      - "^/metrics$"
+
+# Custom detection keywords
+customWords:
+  - "customerID"
+  - "accountNumber"
+
+# Authentication configuration
+authentication:
+  - host: "api.example.com"
+    authType: "jwt"
+    headerKey: "Authorization"
+
+# Suppress false positives
+ignoredDetections:
+  - host: "api.example.com"
+    path: "/users"
+    method: "GET"
+    ignoredPaths:
+      resBody:
+        - "users.*.id"
+```
+
+## Updating Configuration
+
+After modifying `metlo-config.yaml`, restart the Metlo services:
+
+```bash
+docker-compose restart
+```
+
+You can also update configuration through the Metlo UI in **Settings** > **Configuration**.

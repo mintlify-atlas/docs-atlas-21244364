@@ -1,0 +1,424 @@
+---
+title: "Writing Security Tests"
+description: "Learn how to write comprehensive security tests using Metlo's YAML-based testing framework"
+---
+
+## Test File Structure
+
+Metlo tests are written in YAML format with the following structure:
+
+```yaml
+id: unique-test-identifier
+
+meta:
+  name: Human-readable test name
+  severity: CRITICAL | HIGH | MEDIUM | LOW
+  tags:
+    - TAG_NAME
+
+env:
+  - name: VARIABLE_NAME
+    value: variable_value
+
+test:
+  - request:
+      method: GET | POST | PUT | DELETE | PATCH
+      url: https://example.com/endpoint
+      headers:
+        - name: Header-Name
+          value: header-value
+    assert:
+      - key: resp.status
+        value: 200
+
+options:
+  stopOnFailure: true
+```
+
+## Basic Components
+
+### Test ID
+
+Each test must have a unique identifier:
+
+```yaml
+id: test-payment-processor-metlo.com-user-billing
+```
+
+### Metadata
+
+Provide context about the test:
+
+```yaml
+meta:
+  name: Payment API Authentication Test
+  severity: CRITICAL
+  tags:
+    - BROKEN_AUTHENTICATION
+    - PAYMENT_API
+```
+
+**Severity Levels:**
+- `CRITICAL` - High-risk security vulnerabilities
+- `HIGH` - Significant security issues
+- `MEDIUM` - Moderate security concerns
+- `LOW` - Minor security issues
+
+### Environment Variables
+
+Define variables to use across test steps:
+
+```yaml
+env:
+  - name: BASE_URL
+    value: https://api.example.com
+  - name: AUTH_TOKEN
+    value: Bearer eyJhbGc...
+  - name: USER_ID
+    value: "12345"
+```
+
+Reference variables using Handlebars syntax:
+
+```yaml
+url: {{BASE_URL}}/users/{{USER_ID}}
+```
+
+## Test Steps
+
+### Making Requests
+
+<CodeGroup>
+
+```yaml GET Request
+test:
+  - request:
+      method: GET
+      url: https://api.example.com/users/123
+      headers:
+        - name: Authorization
+          value: Bearer token123
+    assert:
+      - key: resp.status
+        value: 200
+```
+
+```yaml POST Request
+test:
+  - request:
+      method: POST
+      url: https://api.example.com/users
+      headers:
+        - name: Content-Type
+          value: application/json
+        - name: Authorization
+          value: Bearer token123
+      data: |-
+        {
+          "name": "John Doe",
+          "email": "john@example.com"
+        }
+    assert:
+      - key: resp.status
+        value: 201
+```
+
+```yaml Query Parameters
+test:
+  - request:
+      method: GET
+      url: https://api.example.com/search
+      query:
+        - name: q
+          value: test
+        - name: limit
+          value: 10
+    assert:
+      - key: resp.status
+        value: 200
+```
+
+```yaml Form Data
+test:
+  - request:
+      method: POST
+      url: https://api.example.com/upload
+      form:
+        - name: file
+          value: image.png
+        - name: description
+          value: Profile picture
+    assert:
+      - key: resp.status
+        value: 200
+```
+
+</CodeGroup>
+
+### GraphQL Requests
+
+For GraphQL endpoints:
+
+```yaml
+test:
+  - request:
+      method: POST
+      url: https://api.example.com/graphql
+      headers:
+        - name: Content-Type
+          value: application/json
+      graphql: |-
+        query {
+          user(id: "123") {
+            name
+            email
+          }
+        }
+    assert:
+      - key: resp.status
+        value: 200
+```
+
+## Assertions
+
+Assertions verify that the response meets expectations.
+
+### Equal Assertion
+
+Check if a value equals an expected value:
+
+```yaml
+assert:
+  - type: EQ
+    key: resp.status
+    value: 200
+```
+
+Check if a value is one of several options:
+
+```yaml
+assert:
+  - key: resp.status
+    value: [401, 403]
+```
+
+### JavaScript Assertions
+
+Use JavaScript expressions for complex assertions:
+
+```yaml
+assert:
+  - type: JS
+    value: "resp.status < 300"
+  - "resp.data.users.length > 0"
+  - "resp.headers['content-type'].includes('application/json')"
+```
+
+### Regular Expression Assertions
+
+Match values against patterns:
+
+```yaml
+assert:
+  - type: REGEXP
+    key: resp.data.email
+    value: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+```
+
+### Assertion Keys
+
+Access different parts of the response:
+
+- `resp.status` - HTTP status code
+- `resp.statusText` - HTTP status message
+- `resp.data` - Response body (parsed JSON)
+- `resp.data.field` - Specific field in response
+- `resp.headers.header-name` - Response header value
+
+## Extractors
+
+Extract values from responses to use in subsequent requests:
+
+```yaml
+test:
+  - request:
+      method: POST
+      url: https://api.example.com/auth/login
+      data: |-
+        {"username": "user", "password": "pass"}
+    extract:
+      - name: authToken
+        type: VALUE
+        value: resp.data.token
+    assert:
+      - key: resp.status
+        value: 200
+  
+  - request:
+      method: GET
+      url: https://api.example.com/profile
+      headers:
+        - name: Authorization
+          value: Bearer {{authToken}}
+    assert:
+      - key: resp.status
+        value: 200
+```
+
+**Extractor Types:**
+- `VALUE` - Extract a direct value from the response
+- `JS` - Use JavaScript to extract a value
+- `REGEXP` - Extract using a regular expression
+- `HTML` - Extract from HTML responses
+
+## Complete Example: Broken Authentication Test
+
+This test verifies that authentication is properly enforced:
+
+```yaml
+id: test-payment-processor-metlo.com-user-billing
+
+meta:
+  name: test-payment-processor.metlo.com/user/billing Test Auth
+  severity: CRITICAL
+  tags:
+    - BROKEN_AUTHENTICATION
+
+test:
+  - request:
+      method: POST
+      url: https://test-payment-processor.metlo.com/user/billing
+      headers:
+        - name: Content-Type
+          value: application/json
+        - name: Authorization
+          value: ...
+      data: |-
+        { "ccn": "...", "cc_exp": "...", "cc_code": "..." }
+    assert:
+      - key: resp.status
+        value: 200
+  - request:
+      method: POST
+      url: https://test-payment-processor.metlo.com/user/billing
+      headers:
+        - name: Content-Type
+          value: application/json
+      data: |-
+        { "ccn": "...", "cc_exp": "...", "cc_code": "..." }
+    assert:
+      - key: resp.status
+        value: [ 401, 403 ]
+```
+
+## Test Options
+
+Control test execution behavior:
+
+```yaml
+options:
+  stopOnFailure: true  # Stop running test steps after first failure
+```
+
+## Payloads
+
+Use predefined payloads for testing common vulnerabilities:
+
+```yaml
+test:
+  - request:
+      method: POST
+      url: https://api.example.com/search
+      data: |-
+        {"query": "{{payload}}"}
+    payload:
+      - key: payload
+        value: SQLI_TIME
+    assert:
+      - "resp.status < 500"
+```
+
+**Predefined Payload Types:**
+- `XSS` - Cross-site scripting payloads
+- `SQLI` - SQL injection payloads
+- `SQLI_AUTH_BYPASS` - SQL auth bypass payloads
+- `SQLI_TIME` - Time-based SQL injection payloads
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive test names">
+    Choose clear, specific names that describe what the test validates:
+    
+    ```yaml
+    meta:
+      name: Verify admin endpoints reject non-admin users
+    ```
+  </Accordion>
+
+  <Accordion title="Test both positive and negative cases">
+    Verify that requests work when they should AND fail when they should:
+    
+    ```yaml
+    test:
+      # Positive case - authenticated request succeeds
+      - request:
+          method: GET
+          url: https://api.example.com/data
+          headers:
+            - name: Authorization
+              value: Bearer valid-token
+        assert:
+          - key: resp.status
+            value: 200
+      
+      # Negative case - unauthenticated request fails
+      - request:
+          method: GET
+          url: https://api.example.com/data
+        assert:
+          - key: resp.status
+            value: [401, 403]
+    ```
+  </Accordion>
+
+  <Accordion title="Use environment variables for sensitive data">
+    Never hardcode credentials or tokens in test files:
+    
+    ```yaml
+    env:
+      - name: API_KEY
+        value: {{global.API_KEY}}
+    ```
+  </Accordion>
+
+  <Accordion title="Set appropriate severity levels">
+    - Use `CRITICAL` for authentication/authorization issues
+    - Use `HIGH` for data exposure or injection vulnerabilities
+    - Use `MEDIUM` for security misconfigurations
+    - Use `LOW` for information disclosure
+  </Accordion>
+
+  <Accordion title="Tag tests appropriately">
+    Use tags to organize and filter tests:
+    
+    ```yaml
+    meta:
+      tags:
+        - BROKEN_AUTHENTICATION
+        - OWASP_TOP_10
+        - USER_API
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Running Tests" icon="play" href="/testing/running-tests">
+    Learn how to execute your tests using the Metlo CLI
+  </Card>
+  <Card title="CI/CD Integration" icon="code-branch" href="/testing/ci-cd-integration">
+    Integrate tests into your deployment pipeline
+  </Card>
+</CardGroup>

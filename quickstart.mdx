@@ -1,80 +1,270 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get Metlo running locally in under 5 minutes using Docker Compose
 ---
 
-## Get started in three steps
+# Get Started with Metlo
 
-Get your documentation site running locally and make your first customization.
+This guide will help you deploy Metlo locally using Docker Compose and start monitoring your APIs in under 5 minutes.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Before you begin, ensure you have:
+
+- **Docker** (version 20.10 or later)
+- **Docker Compose** (version 2.0 or later)
+- At least **2GB of available RAM**
+- **Port availability**: 8000 (frontend), 8080 (backend), 8081 (ingestor)
+
+## Installation
+
+<Steps>
+  <Step title="Clone the Repository">
+    First, clone the Metlo repository:
+
+    ```bash
+    git clone https://github.com/metlo-labs/metlo.git
+    cd metlo
+    ```
+  </Step>
+
+  <Step title="Set Environment Variables">
+    Create a `.env` file in the root directory with required configuration:
+
+    ```bash
+    # Generate a random encryption key
+    ENCRYPTION_KEY=$(openssl rand -base64 32)
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    # Generate a random session secret
+    EXPRESS_SECRET=$(openssl rand -base64 32)
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    # Backend URL (for local development)
+    BACKEND_URL=http://localhost:8080
+    ```
 
-### Step 2: Deploy your changes
+    <Tip>
+    On Linux/Mac, you can generate secure random keys using `openssl rand -base64 32`
+    </Tip>
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Step title="Start Metlo Services">
+    Launch all Metlo components using Docker Compose:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    docker-compose up -d
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    This will start:
+    - PostgreSQL database
+    - Redis cache
+    - Metlo backend (port 8080)
+    - Metlo frontend (port 8000)
+    - Metlo ingestor (port 8081)
+    - Metlo analyzer
+    - Metlo jobs runner
 
-### Step 3: Go live
+    <Info>
+    The first startup may take 2-3 minutes as Docker pulls the necessary images and initializes the database.
+    </Info>
+  </Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+  <Step title="Access the Dashboard">
+    Once all services are running, open your browser and navigate to:
 
-## Next steps
+    ```
+    http://localhost:8000
+    ```
 
-Now that you have your docs running, explore these key features:
+    You should see the Metlo dashboard interface.
+  </Step>
+</Steps>
+
+## Verify Installation
+
+Check that all services are running correctly:
+
+```bash
+docker-compose ps
+```
+
+You should see all services in the "Up" state:
+
+```
+NAME                  STATUS
+metlo-frontend        Up
+metlo-backend         Up
+metlo-ingestor        Up
+metlo-analyzer        Up
+metlo-jobs            Up
+metlo-db              Up
+metlo-cache           Up
+```
+
+## Configure Traffic Monitoring
+
+To start monitoring your APIs, you need to install a Metlo ingestor in your application.
+
+### Node.js Applications
+
+For Node.js apps (Express, Koa, Fastify), install the Metlo package:
+
+<Steps>
+  <Step title="Install Package">
+    ```bash
+    npm install metlo
+    # or
+    yarn add metlo
+    ```
+  </Step>
+
+  <Step title="Configure Express Middleware">
+    Add Metlo middleware to your Express application:
+
+    ```javascript
+    const express = require("express");
+    const { MetloSDK } = require("metlo");
+
+    const app = express();
+
+    // Initialize Metlo - must be first middleware
+    app.use(
+      MetloSDK({
+        host: "http://localhost:8081",
+      })
+    );
+
+    // Your routes here
+    app.get("/api/users", (req, res) => {
+      res.json({ users: [] });
+    });
+
+    app.listen(3000);
+    ```
+  </Step>
+
+  <Step title="Start Your Application">
+    Start your application and make some API requests. Traffic will automatically appear in the Metlo dashboard.
+  </Step>
+</Steps>
+
+### Python Applications
+
+For Python apps (Flask, Django, FastAPI), use the Python ingestor:
+
+```python
+from flask import Flask
+from metlo import MetloFlask
+
+app = Flask(__name__)
+
+# Initialize Metlo
+MetloFlask(app, "http://localhost:8081")
+
+@app.route("/api/users")
+def get_users():
+    return {"users": []}
+```
+
+### Other Languages
+
+Metlo supports multiple languages:
+
+- **Go**: Import the Go ingestor package
+- **Java**: Add the Java agent dependency
+- **Kubernetes**: Deploy the DAPR integration
+
+Refer to the specific ingestor documentation for detailed setup instructions.
+
+## Configuration Options
+
+### Environment Variables
+
+The `docker-compose.yaml` supports these key environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ENCRYPTION_KEY` | Key for encrypting sensitive data | Yes |
+| `EXPRESS_SECRET` | Session secret for backend | Yes |
+| `BACKEND_URL` | Backend API URL | Yes |
+| `LICENSE_KEY` | Enterprise license key | No |
+| `NUM_WORKERS` | Number of analyzer workers | No |
+| `DISABLE_LOGGING_STATS` | Disable usage statistics | No |
+
+### Custom Configuration
+
+You can customize Metlo behavior using `metlo-config.yaml`:
+
+```yaml
+# metlo-config.yaml
+globalFullTraceCapture:
+  enabled: true
+  
+apiEndpoints:
+  - path: /api/v1/users
+    method: GET
+    sensitiveData:
+      - email
+      - phone
+```
+
+## What's Next?
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Architecture Overview" icon="diagram-project" href="/architecture">
+    Learn how Metlo components work together
+  </Card>
+  <Card title="Deploy to Production" icon="cloud">
+    Deploy Metlo to AWS, GCP, or Azure
+  </Card>
+  <Card title="Security Testing" icon="vial">
+    Create security tests for your APIs
+  </Card>
+  <Card title="Attack Detection" icon="shield">
+    Configure attack detection rules
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Troubleshooting
+
+<Warning>
+If services fail to start, ensure ports 8000, 8080, and 8081 are not already in use.
+</Warning>
+
+### Common Issues
+
+**Services won't start**
+```bash
+# Check for port conflicts
+netstat -tuln | grep -E '8000|8080|8081'
+
+# View service logs
+docker-compose logs backend
+docker-compose logs ingestor
+```
+
+**Database connection errors**
+```bash
+# Restart the database and wait for initialization
+docker-compose restart db
+docker-compose logs -f db
+```
+
+**No traffic appearing in dashboard**
+- Verify the ingestor is reachable at `http://localhost:8081`
+- Check that the Metlo middleware is initialized before your routes
+- Ensure your application is making requests to monitored endpoints
+
+## Stop Metlo
+
+To stop all Metlo services:
+
+```bash
+# Stop services but keep data
+docker-compose stop
+
+# Stop services and remove containers (keeps volumes)
+docker-compose down
+
+# Remove everything including data volumes
+docker-compose down -v
+```

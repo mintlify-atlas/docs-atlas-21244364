@@ -1,0 +1,306 @@
+---
+title: Flask Integration
+description: Add Metlo to your Flask application for API security monitoring
+---
+
+Metlo's Python agent provides a simple Flask middleware for capturing API traffic.
+
+## Installation
+
+Install Metlo from PyPI:
+
+```bash
+pip install metlo
+```
+
+## Quick Start
+
+Integrate Metlo by wrapping your Flask app:
+
+```python
+from flask import Flask
+from metlo.flask import MetloFlask
+
+app = Flask(__name__)
+
+# Initialize Metlo
+MetloFlask(app, "<YOUR_METLO_COLLECTOR_URL>", "<YOUR_METLO_API_KEY>")
+
+@app.route("/")
+def hello():
+    return {"message": "Hello World"}
+
+if __name__ == "__main__":
+    app.run()
+```
+
+## Configuration
+
+### Required Parameters
+
+The `MetloFlask` class takes the following required parameters:
+
+<ParamField path="app" type="Flask" required>
+  Your Flask application instance
+</ParamField>
+
+<ParamField path="metlo_host" type="string" required>
+  The URL of your Metlo collector instance (e.g., `https://collector.metlo.com`)
+  
+  Must be a valid HTTP or HTTPS URL.
+</ParamField>
+
+<ParamField path="metlo_api_key" type="string" required>
+  Your Metlo API key for authentication with the collector
+</ParamField>
+
+### Optional Parameters
+
+You can pass additional configuration as keyword arguments:
+
+<ParamField path="workers" type="integer" default="4">
+  Maximum number of worker threads for asynchronous communication with Metlo
+</ParamField>
+
+<ParamField path="disabled" type="boolean" default="false">
+  Disable Metlo without removing the initialization code
+</ParamField>
+
+### Example with Optional Parameters
+
+```python
+from flask import Flask
+from metlo.flask import MetloFlask
+
+app = Flask(__name__)
+
+MetloFlask(
+    app,
+    "https://collector.metlo.com",
+    "your_api_key_here",
+    workers=8,  # Increase workers for high-traffic apps
+    disabled=False
+)
+```
+
+## How It Works
+
+Metlo registers an `after_request` hook that:
+
+1. **Executes after your view** - Captures the final response
+2. **Extracts request/response data** - Headers, body, query parameters
+3. **Asynchronous transmission** - Sends data to Metlo using ThreadPoolExecutor
+4. **Returns response unchanged** - Your application continues normally
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers
+- Request body (decoded as UTF-8)
+- Source IP and port
+
+**Response:**
+- Status code
+- Headers
+- Response body (decoded as UTF-8)
+- Destination IP and port
+
+**Metadata:**
+- Environment: `production`
+- Source identifier: `python/flask`
+- Request/response timestamp
+
+## Full Example Application
+
+```python
+from flask import Flask, request, jsonify
+from metlo.flask import MetloFlask
+import os
+
+app = Flask(__name__)
+
+# Initialize Metlo with environment variables
+MetloFlask(
+    app,
+    os.getenv("METLO_COLLECTOR_URL", "https://collector.metlo.com"),
+    os.getenv("METLO_API_KEY"),
+    workers=4
+)
+
+@app.route("/api/users", methods=["GET", "POST"])
+def users():
+    if request.method == "POST":
+        data = request.get_json()
+        # Process user data
+        return jsonify({
+            "success": True,
+            "user": data
+        }), 201
+    else:
+        # Return list of users
+        return jsonify({
+            "users": []
+        })
+
+@app.route("/api/health")
+def health():
+    return jsonify({"status": "healthy"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+```
+
+## Environment Variables
+
+For security, store your API key in environment variables:
+
+```python
+import os
+from flask import Flask
+from metlo.flask import MetloFlask
+
+app = Flask(__name__)
+
+MetloFlask(
+    app,
+    os.environ.get("METLO_COLLECTOR_URL"),
+    os.environ.get("METLO_API_KEY")
+)
+```
+
+Set them in your environment:
+
+```bash
+export METLO_API_KEY="your_api_key_here"
+export METLO_COLLECTOR_URL="https://collector.metlo.com"
+```
+
+## Flask Blueprints
+
+Metlo works seamlessly with Flask Blueprints:
+
+```python
+from flask import Flask, Blueprint
+from metlo.flask import MetloFlask
+
+app = Flask(__name__)
+
+# Initialize Metlo before registering blueprints
+MetloFlask(app, "https://collector.metlo.com", "your_api_key")
+
+# Create and register blueprints
+api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+@api_bp.route("/users")
+def get_users():
+    return {"users": []}
+
+app.register_blueprint(api_bp)
+```
+
+All routes from blueprints are automatically monitored.
+
+## Flask-RESTful Integration
+
+```python
+from flask import Flask
+from flask_restful import Api, Resource
+from metlo.flask import MetloFlask
+
+app = Flask(__name__)
+api = Api(app)
+
+# Initialize Metlo
+MetloFlask(app, "https://collector.metlo.com", "your_api_key")
+
+class UserResource(Resource):
+    def get(self, user_id):
+        return {"user_id": user_id}
+    
+    def put(self, user_id):
+        # Update user
+        return {"success": True}
+
+api.add_resource(UserResource, "/api/users/<int:user_id>")
+
+if __name__ == "__main__":
+    app.run()
+```
+
+## Request Body Parsing
+
+Metlo captures request bodies from `request.data`. For JSON requests, Flask automatically makes the parsed data available via `request.get_json()`, but Metlo captures the raw body.
+
+```python
+@app.route("/api/data", methods=["POST"])
+def receive_data():
+    # Flask parses JSON
+    json_data = request.get_json()
+    
+    # Metlo captures the raw request.data
+    # Both are available
+    
+    return {"received": json_data}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Metlo not capturing requests">
+    Verify that:
+    - `MetloFlask()` is called with your Flask app instance
+    - Your collector URL is correct and accessible
+    - Your API key is valid
+    - Check Flask logs for Metlo warnings
+  </Accordion>
+
+  <Accordion title="Invalid host scheme error">
+    The collector URL must start with `http://` or `https://`. Example: `https://collector.metlo.com` (not `collector.metlo.com`)
+  </Accordion>
+
+  <Accordion title="Missing parameter errors">
+    Ensure all three required parameters are provided:
+    1. Flask app instance
+    2. Metlo collector URL (string)
+    3. Metlo API key (string)
+  </Accordion>
+
+  <Accordion title="Performance impact">
+    Metlo uses ThreadPoolExecutor for asynchronous communication. Increase the `workers` parameter if you have high traffic volume.
+  </Accordion>
+</AccordionGroup>
+
+## Host Detection
+
+Metlo attempts to detect the destination host from multiple sources:
+- `HTTP_HOST` header
+- `HTTP_X_FORWARDED_FOR` header (for proxied requests)
+- `REMOTE_ADDR` environment variable
+
+This ensures accurate host tracking even behind load balancers or reverse proxies.
+
+## Requirements
+
+- Python >= 3.6
+- Flask >= 0.10
+
+## Performance Considerations
+
+- **Non-blocking** - Metlo uses ThreadPoolExecutor for asynchronous transmission
+- **After request hook** - Runs after your view, doesn't slow down processing
+- **Configurable workers** - Adjust based on traffic volume
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="View APIs" icon="list" href="/features/endpoint-discovery">
+    Discover your Flask API endpoints
+  </Card>
+  <Card title="Security Testing" icon="shield-check" href="/testing/overview">
+    Run automated security tests
+  </Card>
+</CardGroup>

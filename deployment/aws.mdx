@@ -1,0 +1,351 @@
+---
+title: "AWS Deployment"
+description: "Deploy Metlo API Security on Amazon Web Services using CloudFormation"
+---
+
+## Overview
+
+Deploy Metlo on AWS using CloudFormation templates. Metlo provides two deployment options:
+
+1. **Metlo Manager** - Main instance running all Metlo services
+2. **Traffic Mirror Ingestor** - Separate instance for processing VPC traffic mirroring
+
+## Prerequisites
+
+- AWS account with appropriate permissions
+- EC2 Key Pair for SSH access
+- VPC with appropriate networking configuration
+- For traffic mirroring: Subnet and availability zone details
+
+## Deployment Options
+
+<Tabs>
+  <Tab title="Metlo Manager">
+    ### Deploy Metlo Manager
+
+    The Metlo Manager is the main instance that runs the complete Metlo platform including the web UI, backend API, and collector.
+
+    <Steps>
+      <Step title="Launch CloudFormation Stack">
+        Click the button below or use the AWS Console:
+
+        <Note>
+          CloudFormation Template URL:
+          ```
+          https://cf-templates-7639qxxr319s-us-west-1.s3.us-west-1.amazonaws.com/metlo-manager.template
+          ```
+        </Note>
+
+        The deployment will create:
+        - EC2 instance (t3.large)
+        - Security group with required ports
+        - All Metlo services via Docker
+      </Step>
+
+      <Step title="Configure Parameters">
+        Provide the following parameters:
+
+        - **Stack Name**: Name for your CloudFormation stack (e.g., `Metlo-Manager`)
+        - **VPC**: Select the VPC where Metlo will be deployed
+        - **EC2 Key Pair**: Select key pair for SSH access
+        - **License Key**: Optional enterprise license key
+      </Step>
+
+      <Step title="Wait for Deployment">
+        The CloudFormation stack will:
+        1. Launch an EC2 instance with Metlo AMI
+        2. Configure security groups (ports 22, 8081)
+        3. Run the deployment script automatically
+        4. Start all Metlo services
+
+        This process takes approximately 15-20 minutes.
+      </Step>
+
+      <Step title="Access Metlo">
+        Once the stack is complete:
+        1. Get the public IP from the EC2 instance
+        2. Access the UI at `http://PUBLIC_IP:8000`
+        3. Backend API available at `http://PUBLIC_IP:8080`
+        4. Collector endpoint at `http://PUBLIC_IP:8081`
+      </Step>
+    </Steps>
+
+    ### Instance Details
+
+    <ParamField path="Instance Type" type="string" default="t3.large">
+      Recommended instance size for production workloads
+    </ParamField>
+
+    <ParamField path="Operating System" type="string">
+      Amazon Linux 2 with pre-installed Metlo deployment scripts
+    </ParamField>
+
+    ### Security Group Configuration
+
+    The CloudFormation template creates a security group with:
+
+    **Inbound Rules:**
+    - Port 22 (SSH) - From 0.0.0.0/0
+    - Port 8081 (Collector) - From 0.0.0.0/0
+
+    **Outbound Rules:**
+    - Ports 0-65535 (All traffic) - To 0.0.0.0/0
+
+    <Warning>
+      For production deployments, restrict the source IP ranges for ports 22 and 8081 to your specific network ranges.
+    </Warning>
+
+  </Tab>
+
+  <Tab title="Traffic Mirror Ingestor">
+    ### Deploy Traffic Mirror Ingestor
+
+    The Traffic Mirror Ingestor processes VPC traffic mirror data and forwards it to your Metlo Manager instance.
+
+    <Note>
+      You must deploy a Metlo Manager instance first before setting up traffic mirroring.
+    </Note>
+
+    <Steps>
+      <Step title="Generate API Key">
+        1. Log in to your Metlo Manager dashboard
+        2. Navigate to Settings → API Keys
+        3. Generate a new API key for the traffic mirror ingestor
+      </Step>
+
+      <Step title="Launch CloudFormation Stack">
+        <Note>
+          CloudFormation Template URL:
+          ```
+          https://cf-templates-7639qxxr319s-us-west-1.s3.us-west-1.amazonaws.com/metlo-ingestor.template
+          ```
+        </Note>
+      </Step>
+
+      <Step title="Configure Parameters">
+        Provide the following parameters:
+
+        **Network Configuration:**
+        - **VPC**: Select the VPC where traffic will be mirrored
+        - **Subnet**: Select subnet for the ingestor instance
+        - **Availability Zone**: Select AZ matching your subnet
+
+        **Metlo Configuration:**
+        - **Metlo Address**: Your Metlo Manager collector URL (e.g., `http://10.0.1.100:8081` or `https://metlo.example.com:8081`)
+        - **Metlo Key**: API key generated in Step 1
+
+        **Instance Configuration:**
+        - **EC2 Key Pair**: Select key pair for SSH access
+      </Step>
+
+      <Step title="Configure Traffic Mirroring">
+        After the stack is created:
+
+        1. Create a Traffic Mirror Target pointing to the ingestor instance
+        2. Create a Traffic Mirror Filter with appropriate rules
+        3. Create Traffic Mirror Sessions for your monitored instances
+
+        The ingestor will receive traffic on UDP port 4789 (VXLAN).
+      </Step>
+    </Steps>
+
+    ### Instance Details
+
+    <ParamField path="Instance Type" type="string" default="t3.small">
+      Suitable for most traffic mirroring workloads. Scale up for high-traffic environments.
+    </ParamField>
+
+    <ParamField path="Operating System" type="string">
+      Ubuntu 18.04 LTS with VXLAN support
+    </ParamField>
+
+    ### Security Group Configuration
+
+    **Inbound Rules:**
+    - Port 22 (TCP) - From 0.0.0.0/0 (SSH access)
+    - Port 4789 (UDP) - From 10.0.0.0/8 (VPC traffic)
+    - Port 4789 (UDP) - From 172.16.0.0/12 (VPC traffic)
+    - Port 4789 (UDP) - From 192.168.0.0/16 (VPC traffic)
+
+    **Outbound Rules:**
+    - All ports (TCP) - To 0.0.0.0/0
+
+    <Warning>
+      Ensure your Metlo Manager collector endpoint (port 8081) is accessible from the Traffic Mirror Ingestor instance.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Supported Regions
+
+Metlo provides AMIs in the following AWS regions:
+
+<Tabs>
+  <Tab title="Americas">
+    - us-east-1 (N. Virginia)
+    - us-east-2 (Ohio)
+    - us-west-1 (N. California)
+    - us-west-2 (Oregon)
+    - ca-central-1 (Canada)
+    - sa-east-1 (São Paulo)
+  </Tab>
+
+  <Tab title="Europe">
+    - eu-west-1 (Ireland)
+    - eu-west-2 (London)
+    - eu-west-3 (Paris)
+    - eu-north-1 (Stockholm)
+    - eu-central-1 (Frankfurt)
+  </Tab>
+
+  <Tab title="Asia Pacific">
+    - ap-southeast-2 (Sydney)
+    - ap-northeast-1 (Tokyo)
+    - ap-northeast-2 (Seoul)
+    - ap-south-1 (Mumbai)
+    - ap-southeast-1 (Singapore)
+  </Tab>
+</Tabs>
+
+## Post-Deployment Configuration
+
+### SSH Access
+
+Connect to your instance using the key pair you specified:
+
+```bash
+ssh -i /path/to/your-key.pem ec2-user@YOUR_INSTANCE_IP
+```
+
+### Management Commands
+
+Once connected, use the `metlo-deploy` command:
+
+<CodeGroup>
+```bash Check Status
+sudo metlo-deploy status
+```
+
+```bash Restart Services
+sudo metlo-deploy restart
+```
+
+```bash Update Metlo
+sudo metlo-deploy update
+```
+
+```bash View Logs
+cd /opt/metlo
+sudo docker-compose logs -f
+```
+</CodeGroup>
+
+### Environment Variables
+
+Configuration is stored in `/opt/metlo/.env`. Key variables:
+
+```bash
+LICENSE_KEY=your-license-key
+ENCRYPTION_KEY=auto-generated
+BACKEND_URL=http://YOUR_INSTANCE_IP:8081
+EXPRESS_SECRET=auto-generated
+```
+
+## Advanced Configuration
+
+### Custom CloudFormation Deployment
+
+For more control, download and customize the CloudFormation templates:
+
+```bash
+wget https://raw.githubusercontent.com/metlo-labs/metlo/master/deploy/cloudformation/metlo-manager-deployment.json
+wget https://raw.githubusercontent.com/metlo-labs/metlo/master/deploy/cloudformation/metlo-traffic-mirror-deployment.json
+```
+
+Modify as needed and deploy via AWS CLI:
+
+```bash
+aws cloudformation create-stack \
+  --stack-name metlo-manager \
+  --template-body file://metlo-manager-deployment.json \
+  --parameters \
+    ParameterKey=VPC,ParameterValue=vpc-xxxxx \
+    ParameterKey=metloKeyPair,ParameterValue=your-keypair \
+    ParameterKey=licenseKey,ParameterValue=your-license
+```
+
+### Using Custom AMI
+
+To build your own Metlo AMI:
+
+1. Launch a base Amazon Linux 2 instance
+2. Run the deployment script:
+   ```bash
+   wget https://raw.githubusercontent.com/metlo-labs/metlo/master/deploy/deploy_script.sh
+   chmod +x deploy_script.sh
+   sudo ./deploy_script.sh
+   ```
+3. Create an AMI from the configured instance
+4. Update the CloudFormation template with your AMI ID
+
+## Cost Estimation
+
+<Note>
+  Estimated monthly costs (us-east-1 region):
+  - **Metlo Manager (t3.large)**: ~$60-70/month
+  - **Traffic Mirror Ingestor (t3.small)**: ~$15-20/month
+  - **Data Transfer**: Varies based on traffic volume
+  - **EBS Storage**: ~$10/month for 50GB
+
+  Actual costs may vary based on usage and region.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="CloudFormation stack creation fails">
+    - Verify your EC2 key pair exists in the selected region
+    - Ensure you have sufficient EC2 instance limits
+    - Check IAM permissions for CloudFormation and EC2
+    - Review CloudFormation Events tab for specific errors
+  </Accordion>
+
+  <Accordion title="Cannot access Metlo UI after deployment">
+    - Wait 15-20 minutes for full initialization
+    - Check the EC2 instance is running
+    - Verify security group allows inbound traffic on port 8000
+    - SSH into the instance and check service status: `sudo metlo-deploy status`
+  </Accordion>
+
+  <Accordion title="Traffic mirror data not appearing">
+    - Verify the Metlo Address parameter includes the correct port (8081)
+    - Check the API key is valid
+    - Ensure traffic mirror sessions are configured correctly
+    - Verify security group allows UDP 4789 from your VPC CIDR
+    - Check ingestor logs: `sudo journalctl -u metlo-traffic-mirror`
+  </Accordion>
+
+  <Accordion title="High costs or unexpected charges">
+    - Review Data Transfer costs from VPC traffic mirroring
+    - Consider using VPC endpoints to reduce data transfer costs
+    - Scale down instance types for testing/development environments
+    - Set up billing alerts in AWS Cost Explorer
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Traffic Mirroring" icon="network-wired" href="/integrations/traffic-mirror/aws">
+    Set up VPC traffic mirroring
+  </Card>
+  <Card title="Connect Data Sources" icon="plug" href="/integrations/overview">
+    Configure other data source integrations
+  </Card>
+  <Card title="Security Policies" icon="shield-halved" href="/configuration/alerts-webhooks">
+    Configure detection and blocking rules
+  </Card>
+  <Card title="Environment Variables" icon="database" href="/configuration/environment-variables">
+    Configure environment settings
+  </Card>
+</CardGroup>

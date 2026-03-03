@@ -1,0 +1,389 @@
+---
+title: Testing API
+description: Generate and manage API security tests with Metlo
+---
+
+The Testing API allows you to generate security tests for your API endpoints and retrieve global testing environment configurations.
+
+## Generate Test for Endpoint
+
+Generate a security test for a specific endpoint.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/gen-test-endpoint?endpoint=/api/users&host=api.example.com&method=GET' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Query Parameters
+
+<ParamField query="endpoint" type="string" required>
+  The endpoint path to generate tests for (e.g., `/api/users/{id}`)
+</ParamField>
+
+<ParamField query="host" type="string">
+  The hostname where the endpoint is located
+</ParamField>
+
+<ParamField query="method" type="string">
+  HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, etc.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether test generation was successful
+</ResponseField>
+
+<ResponseField name="templateName" type="string">
+  Name of the test template used
+</ResponseField>
+
+<ResponseField name="templateVersion" type="number">
+  Version of the test template
+</ResponseField>
+
+<ResponseField name="test" type="TestConfig">
+  Generated test configuration object
+</ResponseField>
+
+<ResponseField name="msg" type="string">
+  Error message if generation failed
+</ResponseField>
+
+```json Response Example
+{
+  "success": true,
+  "templateName": "authentication_bypass",
+  "templateVersion": 1,
+  "test": {
+    "id": "test_550e8400",
+    "name": "Authentication Bypass Test",
+    "endpoint": "/api/users/{id}",
+    "method": "GET",
+    "requests": [
+      {
+        "description": "Attempt to access without auth header",
+        "headers": {},
+        "expectedStatus": 401
+      },
+      {
+        "description": "Attempt with invalid auth token",
+        "headers": {
+          "Authorization": "Bearer invalid_token"
+        },
+        "expectedStatus": 401
+      }
+    ]
+  }
+}
+```
+
+### Error Response
+
+```json
+{
+  "success": false,
+  "msg": "Could not find endpoint."
+}
+```
+
+## Generate Tests for Host
+
+Generate tests for all endpoints on a specific host.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/gen-test-endpoints?host=api.example.com' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Query Parameters
+
+<ParamField query="host" type="string" required>
+  The hostname to generate tests for
+</ParamField>
+
+### Response
+
+Returns an array of test configurations for all endpoints on the specified host:
+
+```json Response Example
+[
+  {
+    "success": true,
+    "templateName": "authentication_bypass",
+    "templateVersion": 1,
+    "endpoint": "/api/users",
+    "method": "GET",
+    "test": { /* test config */ }
+  },
+  {
+    "success": true,
+    "templateName": "sql_injection",
+    "templateVersion": 1,
+    "endpoint": "/api/users/{id}",
+    "method": "GET",
+    "test": { /* test config */ }
+  },
+  {
+    "success": false,
+    "endpoint": "/api/internal/status",
+    "method": "GET",
+    "msg": "No suitable test template found"
+  }
+]
+```
+
+## Get Global Testing Environment
+
+Retrieve the global environment variables and configuration for testing.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/testing/global-env' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Response
+
+<ResponseField name="environment" type="object">
+  Global environment variables for testing
+</ResponseField>
+
+Returns the global environment configuration, or an empty array if not configured:
+
+```json Response Example
+{
+  "baseUrl": "https://api.example.com",
+  "authToken": "{{AUTH_TOKEN}}",
+  "testUserId": "test-user-123",
+  "timeout": 5000,
+  "retries": 3,
+  "headers": {
+    "X-API-Version": "v1",
+    "User-Agent": "Metlo-Testing/1.0"
+  }
+}
+```
+
+```json Empty Response
+[]
+```
+
+<Note>
+  If no global environment is configured, the endpoint returns an empty array `[]` instead of an error.
+</Note>
+
+## Test Types
+
+Metlo can generate various types of security tests:
+
+<CardGroup cols={2}>
+  <Card title="Authentication Bypass" icon="lock-open">
+    Tests for authentication vulnerabilities
+  </Card>
+  <Card title="SQL Injection" icon="database">
+    Tests for SQL injection vulnerabilities
+  </Card>
+  <Card title="XSS (Cross-Site Scripting)" icon="code">
+    Tests for XSS vulnerabilities
+  </Card>
+  <Card title="BOLA (Broken Object Level Auth)" icon="user-lock">
+    Tests for authorization issues
+  </Card>
+  <Card title="Mass Assignment" icon="list-check">
+    Tests for mass assignment vulnerabilities
+  </Card>
+  <Card title="Rate Limiting" icon="gauge-high">
+    Tests for rate limiting implementation
+  </Card>
+</CardGroup>
+
+## Test Configuration Structure
+
+Generated tests follow this structure:
+
+```typescript
+interface TestConfig {
+  id: string
+  name: string
+  description?: string
+  endpoint: string
+  method: string
+  requests: TestRequest[]
+  assertions?: Assertion[]
+}
+
+interface TestRequest {
+  description: string
+  headers?: Record<string, string>
+  body?: any
+  queryParams?: Record<string, string>
+  expectedStatus?: number
+  expectedResponse?: any
+}
+
+interface Assertion {
+  type: string
+  field: string
+  condition: string
+  value: any
+}
+```
+
+## Use Cases
+
+### Generate Tests for All Critical Endpoints
+
+```bash
+# Get all high-risk endpoints
+curl 'https://<your-metlo-instance>/api/v1/endpoints?riskScores=HIGH' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  > endpoints.json
+
+# Generate tests for each endpoint
+for endpoint in $(jq -r '.[].path' endpoints.json); do
+  host=$(jq -r '.[] | select(.path=="'$endpoint'") | .host' endpoints.json)
+  method=$(jq -r '.[] | select(.path=="'$endpoint'") | .method' endpoints.json)
+  
+  curl "https://<your-metlo-instance>/api/v1/gen-test-endpoint?endpoint=$endpoint&host=$host&method=$method" \
+    -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+    > "test_${endpoint//\//_}.json"
+done
+```
+
+### Batch Test Generation
+
+Generate tests for all endpoints on your production API:
+
+```python
+import requests
+
+api_key = 'metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+base_url = 'https://<your-metlo-instance>'
+headers = {'Authorization': api_key}
+
+# Get all hosts
+response = requests.get(f'{base_url}/api/v1/hosts', headers=headers)
+hosts = [h['host'] for h in response.json()]
+
+# Generate tests for each host
+for host in hosts:
+    print(f"Generating tests for {host}...")
+    response = requests.get(
+        f'{base_url}/api/v1/gen-test-endpoints',
+        params={'host': host},
+        headers=headers
+    )
+    
+    tests = response.json()
+    successful = sum(1 for t in tests if t.get('success'))
+    print(f"  Generated {successful}/{len(tests)} tests")
+```
+
+### Configure Global Testing Environment
+
+While there's no direct API to update the global environment via the REST API shown in the source code, you can retrieve it to understand the current configuration:
+
+```javascript
+const response = await fetch(
+  'https://<your-metlo-instance>/api/v1/testing/global-env',
+  {
+    headers: {
+      'Authorization': 'metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+    }
+  }
+);
+
+const globalEnv = await response.json();
+
+if (Array.isArray(globalEnv) && globalEnv.length === 0) {
+  console.log('No global environment configured');
+} else {
+  console.log('Global environment:', globalEnv);
+}
+```
+
+## Integration with CI/CD
+
+Integrate Metlo's test generation into your CI/CD pipeline:
+
+```yaml
+# GitHub Actions example
+name: API Security Tests
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * *'  # Daily
+
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate tests from Metlo
+        run: |
+          curl 'https://<your-metlo-instance>/api/v1/gen-test-endpoints?host=api.example.com' \
+            -H 'Authorization: ${{ secrets.METLO_API_KEY }}' \
+            -o tests.json
+      
+      - name: Run generated tests
+        run: |
+          # Use your preferred test runner
+          npm run test:security tests.json
+```
+
+## Error Responses
+
+### 400 Bad Request - Missing Parameters
+
+```json
+"No endpoint specified."
+```
+
+Returned when the required `endpoint` or `host` parameter is missing.
+
+### 404 Not Found - Endpoint Not Found
+
+```json
+{
+  "success": false,
+  "msg": "Could not find endpoint."
+}
+```
+
+Returned when the specified endpoint doesn't exist in Metlo's database.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Generate Tests After Discovery">
+    After Metlo discovers new endpoints, generate security tests to ensure they're properly secured.
+  </Accordion>
+  
+  <Accordion title="Automate Test Execution">
+    Integrate generated tests into your CI/CD pipeline for continuous security testing.
+  </Accordion>
+  
+  <Accordion title="Review Generated Tests">
+    Always review generated tests before running them against production to ensure they won't cause unintended side effects.
+  </Accordion>
+  
+  <Accordion title="Customize Tests">
+    Use the generated tests as a starting point and customize them for your specific security requirements.
+  </Accordion>
+  
+  <Accordion title="Test in Staging First">
+    Run generated tests against staging environments before production.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Endpoints API" icon="route" href="/api/endpoints">
+    Learn about managing endpoints
+  </Card>
+  <Card title="Alerts API" icon="bell" href="/api/alerts">
+    View security alerts from test results
+  </Card>
+</CardGroup>

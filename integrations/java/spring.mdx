@@ -1,0 +1,348 @@
+---
+title: Spring Integration
+description: Integrate Metlo with Spring Framework for Java API security monitoring
+---
+
+Metlo provides a Java agent for Spring applications through a servlet filter that captures API traffic.
+
+## Installation
+
+Add the Metlo Spring dependency to your Maven `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>com.metlo</groupId>
+    <artifactId>spring</artifactId>
+    <version>0.4.1</version>
+</dependency>
+```
+
+<Note>
+For Gradle, add:
+```groovy
+implementation 'com.metlo:spring:0.4.1'
+```
+</Note>
+
+## Quick Start
+
+<Steps>
+  <Step title="Create Metlo filter bean">
+    Add a Metlo filter bean to your Spring configuration:
+
+    ```java
+    import com.metlo.spring.Metlo;
+    import org.springframework.context.annotation.Bean;
+    import org.springframework.context.annotation.Configuration;
+
+    @Configuration
+    public class MetloConfig {
+        
+        @Bean
+        public Metlo metloFilter() {
+            return new Metlo(
+                "<YOUR_METLO_COLLECTOR_URL>",
+                "<YOUR_METLO_API_KEY>"
+            );
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Register as filter">
+    The filter will be automatically registered by Spring Boot. For non-Boot applications, register it in `web.xml` or using `FilterRegistrationBean`.
+  </Step>
+
+  <Step title="Run your application">
+    Start your Spring application. Metlo will now capture all HTTP requests.
+  </Step>
+</Steps>
+
+## Configuration
+
+### Constructor Options
+
+The `Metlo` class provides multiple constructors for different configuration needs:
+
+#### Basic Configuration
+
+```java
+public Metlo(String host, String api_key)
+```
+
+<ParamField path="host" type="String" required>
+  The URL of your Metlo collector instance
+</ParamField>
+
+<ParamField path="api_key" type="String" required>
+  Your Metlo API key for authentication
+</ParamField>
+
+#### With Rate Limiting
+
+```java
+public Metlo(String host, String api_key, Integer rps)
+```
+
+<ParamField path="rps" type="Integer" default="10">
+  Maximum requests per second to send to Metlo collector. Use `-1` for unlimited.
+</ParamField>
+
+#### Advanced Configuration
+
+```java
+public Metlo(int pool_size, String host, String api_key, Integer rps)
+```
+
+<ParamField path="pool_size" type="int" default="2">
+  Number of threads in the executor pool for asynchronous communication
+</ParamField>
+
+### Configuration Examples
+
+<CodeGroup>
+```java Basic
+@Bean
+public Metlo metloFilter() {
+    return new Metlo(
+        "https://collector.metlo.com",
+        "your_api_key_here"
+    );
+}
+```
+
+```java With Rate Limit
+@Bean
+public Metlo metloFilter() {
+    return new Metlo(
+        "https://collector.metlo.com",
+        "your_api_key_here",
+        100  // Max 100 requests per second
+    );
+}
+```
+
+```java Full Configuration
+@Bean
+public Metlo metloFilter() {
+    return new Metlo(
+        8,  // Thread pool size
+        "https://collector.metlo.com",
+        "your_api_key_here",
+        -1  // Unlimited requests per second
+    );
+}
+```
+</CodeGroup>
+
+## Environment-Based Configuration
+
+Use environment variables for production deployments:
+
+```java
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import com.metlo.spring.Metlo;
+
+@Configuration
+public class MetloConfig {
+    
+    @Value("${metlo.collector.url}")
+    private String metloCollectorUrl;
+    
+    @Value("${metlo.api.key}")
+    private String metloApiKey;
+    
+    @Bean
+    public Metlo metloFilter() {
+        return new Metlo(metloCollectorUrl, metloApiKey);
+    }
+}
+```
+
+Then set in `application.properties`:
+
+```properties
+metlo.collector.url=https://collector.metlo.com
+metlo.api.key=${METLO_API_KEY}
+```
+
+## How It Works
+
+Metlo extends `OncePerRequestFilter` to ensure single execution per request:
+
+1. **Wraps request/response** - Uses `ContentCachingRequestWrapper` and custom response wrapper
+2. **Processes filter chain** - Your controllers execute normally
+3. **Captures data** - Extracts headers, body, parameters after response completes
+4. **Asynchronous transmission** - Sends data using executor service with rate limiting
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers
+- Request body
+- Source IP and port
+
+**Response:**
+- Status code
+- Headers (including Content-Type)
+- Response body
+- Destination IP and port
+
+**Metadata:**
+- Environment: `production`
+- Source identifier: `java/spring`
+- Request/response timestamp
+
+## Full Spring Boot Example
+
+### MetloConfig.java
+
+```java
+package com.example.demo.config;
+
+import com.metlo.spring.Metlo;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class MetloConfig {
+    
+    @Value("${metlo.collector.url}")
+    private String collectorUrl;
+    
+    @Value("${metlo.api.key}")
+    private String apiKey;
+    
+    @Bean
+    public Metlo metloFilter() {
+        return new Metlo(
+            4,  // Thread pool size
+            collectorUrl,
+            apiKey,
+            50  // Max 50 RPS
+        );
+    }
+}
+```
+
+### UserController.java
+
+```java
+package com.example.demo.controller;
+
+import org.springframework.web.bind.annotation.*;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+    
+    @GetMapping
+    public Map<String, Object> getUsers() {
+        return Map.of("users", List.of());
+    }
+    
+    @PostMapping
+    public Map<String, Object> createUser(@RequestBody Map<String, String> userData) {
+        // Process user creation
+        return Map.of(
+            "success", true,
+            "user", userData
+        );
+    }
+}
+```
+
+### application.properties
+
+```properties
+metlo.collector.url=https://collector.metlo.com
+metlo.api.key=${METLO_API_KEY}
+
+server.port=8080
+```
+
+## Disabling Metlo
+
+You can disable Metlo using the `METLO_ENABLED` environment variable:
+
+```bash
+export METLO_ENABLED=false
+```
+
+When disabled, the filter is registered but doesn't process or send any data.
+
+## Rate Limiting
+
+Metlo includes built-in rate limiting to prevent overwhelming the collector:
+
+- **Default**: 10 requests per second
+- **Configurable**: Set via constructor parameter
+- **Unlimited**: Use `-1` to disable rate limiting
+
+```java
+// Limit to 100 RPS
+new Metlo(host, apiKey, 100)
+
+// Unlimited
+new Metlo(host, apiKey, -1)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Filter not capturing requests">
+    Verify that:
+    - The Metlo bean is defined in a `@Configuration` class
+    - Spring Boot auto-configuration is enabled
+    - Check application logs for Metlo warnings
+    - Ensure the collector URL is accessible
+  </Accordion>
+
+  <Accordion title="Connection refused errors">
+    Check that:
+    - The Metlo collector URL is correct
+    - Your application can reach the collector (check firewalls)
+    - The collector service is running
+  </Accordion>
+
+  <Accordion title="Empty request/response body">
+    Metlo uses content caching wrappers. Ensure you're not reading the request/response stream before Metlo processes it.
+  </Accordion>
+
+  <Accordion title="High memory usage">
+    Reduce the thread pool size or lower the RPS limit if you're experiencing memory pressure under high load.
+  </Accordion>
+</AccordionGroup>
+
+## Requirements
+
+- Java >= 8
+- Spring Framework >= 4.2.0 (for `ContentCachingRequestWrapper`)
+- Servlet API >= 2.3
+
+## Compatibility
+
+Metlo's Spring integration works with:
+- Spring Boot 2.x and 3.x
+- Spring MVC
+- Spring WebFlux (use Spring Reactive integration instead)
+- Embedded servers (Tomcat, Jetty, Undertow)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Discovery" icon="radar" href="/features/endpoint-discovery">
+    View your discovered Spring APIs
+  </Card>
+  <Card title="Spring Reactive" icon="bolt" href="/integrations/java/spring-reactive">
+    Use Metlo with reactive Spring applications
+  </Card>
+</CardGroup>

@@ -1,0 +1,119 @@
+---
+title: "Testing Framework Overview"
+description: "Learn how Metlo's built-in testing framework helps you achieve 100% security coverage on your highest risk APIs"
+---
+
+## Introduction
+
+Metlo's built-in testing framework helps you get to **100% Security Coverage on your highest risk APIs**. You can build tests in a YAML format to ensure your API is working as intended and secure against common vulnerabilities.
+
+![Testing Screenshot](https://metlo-api-security-public.s3.us-west-2.amazonaws.com/testing-screenshot.png)
+
+## Key Features
+
+- **Auto-generated Tests** - Automatically generate tests for OWASP Top 10 vulnerabilities like BOLA, Broken Authentication, SQL Injection and more
+- **Custom Test Templates** - Create your own test templates for specific security requirements
+- **YAML-Based Configuration** - Write tests in a simple, readable YAML format
+- **CI/CD Integration** - Integrate with your CI/CD pipeline to find issues in development and staging
+- **Built-in Templates** - Pre-built templates for common security tests
+
+## Available Test Templates
+
+Metlo provides built-in templates for common security vulnerabilities:
+
+<CardGroup cols={2}>
+  <Card title="BOLA" icon="user-lock">
+    Test for Broken Object Level Authorization vulnerabilities
+  </Card>
+  <Card title="Broken Authentication" icon="shield-halved">
+    Verify authentication is properly enforced on protected endpoints
+  </Card>
+  <Card title="SQL Injection" icon="database">
+    Test for SQL injection vulnerabilities using time-based detection
+  </Card>
+  <Card title="Content Security Policy" icon="helmet-safety">
+    Validate CSP headers are properly configured
+  </Card>
+  <Card title="HSTS" icon="lock">
+    Ensure HTTP Strict Transport Security is enabled
+  </Card>
+  <Card title="Multi-Tenant BOLA" icon="users">
+    Test for authorization issues in multi-tenant applications
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Write Tests">
+    Create test files in YAML format that define API requests and expected responses
+  </Step>
+  <Step title="Run Tests">
+    Execute tests using the Metlo CLI or integrate them into your CI/CD pipeline
+  </Step>
+  <Step title="Review Results">
+    View detailed test results including failed assertions and request/response data
+  </Step>
+  <Step title="Fix Issues">
+    Address security vulnerabilities identified by the tests
+  </Step>
+</Steps>
+
+## Test Structure
+
+A Metlo test consists of:
+
+- **Test ID** - Unique identifier for the test
+- **Metadata** - Name, severity level, and tags
+- **Environment Variables** - Configuration values used across test steps
+- **Test Steps** - Sequence of HTTP requests with assertions
+- **Assertions** - Conditions that must be true for the test to pass
+
+## Quick Example
+
+Here's a simple test that verifies authentication is required:
+
+```yaml
+id: auth-required-test
+
+meta:
+  name: Verify Authentication Required
+  severity: HIGH
+  tags:
+    - BROKEN_AUTHENTICATION
+
+test:
+  - request:
+      method: GET
+      url: https://api.example.com/protected
+      headers:
+        - name: Authorization
+          value: Bearer valid-token
+    assert:
+      - key: resp.status
+        value: 200
+  
+  - request:
+      method: GET
+      url: https://api.example.com/protected
+    assert:
+      - key: resp.status
+        value: [401, 403]
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Writing Tests" icon="pen" href="/testing/writing-tests">
+    Learn how to write security tests in YAML format
+  </Card>
+  <Card title="Running Tests" icon="play" href="/testing/running-tests">
+    Execute tests using the Metlo CLI
+  </Card>
+  <Card title="CI/CD Integration" icon="code-branch" href="/testing/ci-cd-integration">
+    Integrate tests into your deployment pipeline
+  </Card>
+  <Card title="Custom Templates" icon="wand-magic-sparkles" href="/testing/custom-templates">
+    Create your own test templates
+  </Card>
+</CardGroup>

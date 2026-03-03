@@ -1,0 +1,269 @@
+---
+title: "Docker Deployment"
+description: "Deploy Metlo API Security using Docker and Docker Compose"
+---
+
+## Overview
+
+Deploy Metlo on any machine with Docker and Docker Compose. This is the quickest way to get started with Metlo and requires minimal setup.
+
+## Prerequisites
+
+- Docker Engine installed
+- Docker Compose (v1.29.0 or later)
+- At least 4GB of RAM
+- 10GB of available disk space
+
+## Quick Start
+
+<Steps>
+  <Step title="Install deployment script">
+    Download and install the Metlo deployment management script:
+
+    ```bash
+    sudo mkdir -p /opt/metlo
+    sudo wget https://raw.githubusercontent.com/metlo-labs/metlo/master/manage-deployment.py -O /opt/metlo/manage-deployment.py
+    sudo chmod +x /opt/metlo/manage-deployment.py
+    sudo ln -s /opt/metlo/manage-deployment.py /usr/bin/metlo-deploy
+    ```
+  </Step>
+
+  <Step title="Initialize Metlo">
+    Initialize the Metlo deployment (pulls required files and Docker images):
+
+    ```bash
+    export METLO_DIR=/opt/metlo
+    sudo -E metlo-deploy init
+    ```
+
+    You'll be prompted for an optional license key. Press Enter to skip for the open-source version.
+  </Step>
+
+  <Step title="Start Metlo">
+    Start all Metlo services:
+
+    ```bash
+    sudo metlo-deploy start
+    ```
+  </Step>
+
+  <Step title="Access the dashboard">
+    Once started, access the Metlo dashboard:
+
+    - Frontend UI: `http://YOUR_SERVER_IP:8000`
+    - Backend API: `http://YOUR_SERVER_IP:8080`
+    - Collector (Ingestor): `http://YOUR_SERVER_IP:8081`
+  </Step>
+</Steps>
+
+## Architecture
+
+The Docker deployment consists of six services:
+
+- **PostgreSQL Database** (`db`) - Stores all API security data
+- **Redis Cache** (`cache`) - Handles session management and caching
+- **Ingestor** (`ingestor`) - Collects and processes API traffic data
+- **Backend** (`backend`) - Core API and business logic
+- **Jobs Runner** (`jobs`) - Handles background processing tasks
+- **Analyzer** (`analyzer`) - Analyzes API traffic for security issues
+- **Frontend** (`frontend`) - Web UI for the dashboard
+
+## Environment Variables
+
+Metlo uses environment variables for configuration. These are automatically generated during initialization and stored in `/opt/metlo/.env`:
+
+### Required Variables
+
+<ParamField path="ENCRYPTION_KEY" type="string" required>
+  Base64-encoded encryption key for sensitive data. Auto-generated during setup.
+</ParamField>
+
+<ParamField path="BACKEND_URL" type="string" required>
+  URL where the backend service is accessible (e.g., `http://YOUR_IP:8081`)
+</ParamField>
+
+<ParamField path="EXPRESS_SECRET" type="string" required>
+  Secret key for Express.js session management. Auto-generated during setup.
+</ParamField>
+
+### Optional Variables
+
+<ParamField path="LICENSE_KEY" type="string">
+  Enterprise license key for advanced features. Leave empty for open-source version.
+</ParamField>
+
+<ParamField path="NUM_WORKERS" type="number" default="1">
+  Number of worker processes for the analyzer service.
+</ParamField>
+
+<ParamField path="SANDBOX_MODE" type="boolean" default="false">
+  Enable sandbox mode for testing without affecting production data.
+</ParamField>
+
+<ParamField path="DISABLE_LOGGING_STATS" type="boolean" default="false">
+  Disable anonymous usage statistics logging.
+</ParamField>
+
+### Database Connection
+
+<ParamField path="DB_URL" type="string" default="postgres://postgres:postgres@db:5432/metlo_api_security">
+  PostgreSQL connection string
+</ParamField>
+
+<ParamField path="REDIS_URL" type="string" default="redis://:eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81@cache:6379">
+  Redis connection string
+</ParamField>
+
+<Warning>
+  The default Redis password in the docker-compose.yaml should be changed for production deployments. Update both the `cache` service configuration and the `REDIS_URL` environment variable.
+</Warning>
+
+## Docker Compose Configuration
+
+The deployment uses the official Metlo Docker images:
+
+- `metlo/backend:latest` - Backend and Ingestor services
+- `metlo/frontend:latest` - Frontend web UI
+- `metlo/jobrunner:latest` - Background jobs and analyzer
+
+You can pin to a specific version by setting the `DOCKER_IMAGE_TAG` environment variable:
+
+```bash
+export DOCKER_IMAGE_TAG=v1.2.3
+```
+
+## Management Commands
+
+The `metlo-deploy` script provides several commands:
+
+<CodeGroup>
+```bash Start Services
+metlo-deploy start
+```
+
+```bash Stop Services
+metlo-deploy stop
+```
+
+```bash Restart Services
+metlo-deploy restart
+```
+
+```bash Check Status
+metlo-deploy status
+```
+
+```bash Update to Latest
+metlo-deploy update
+```
+
+```bash Reinitialize Environment
+metlo-deploy init-env
+```
+</CodeGroup>
+
+## Custom Configuration
+
+For advanced users who want to customize the deployment:
+
+<Steps>
+  <Step title="Download configuration files">
+    ```bash
+    mkdir metlo-deployment && cd metlo-deployment
+    wget https://raw.githubusercontent.com/metlo-labs/metlo/master/docker-compose.yaml
+    wget https://raw.githubusercontent.com/metlo-labs/metlo/master/init.sql
+    wget https://raw.githubusercontent.com/metlo-labs/metlo/master/metlo-config.yaml
+    ```
+  </Step>
+
+  <Step title="Create environment file">
+    Create a `.env` file with your configuration:
+
+    ```bash
+    ENCRYPTION_KEY="your-base64-encoded-key"
+    BACKEND_URL="http://your-server-ip:8081"
+    EXPRESS_SECRET="your-secret-key"
+    LICENSE_KEY="your-license-key" # Optional
+    NUM_WORKERS=1
+    SANDBOX_MODE=false
+    DISABLE_LOGGING_STATS=false
+    ```
+  </Step>
+
+  <Step title="Modify docker-compose.yaml">
+    Customize ports, resource limits, or other settings as needed.
+  </Step>
+
+  <Step title="Launch services">
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+</Steps>
+
+## Ports
+
+Ensure these ports are available on your host machine:
+
+- **8000** - Frontend web interface
+- **8080** - Backend API
+- **8081** - Ingestor/Collector API
+
+## Data Persistence
+
+The deployment creates two Docker volumes for data persistence:
+
+- `db` - PostgreSQL data directory
+- `cache` - Redis data directory
+
+To backup your data, use Docker volume backup strategies or connect to the database directly:
+
+```bash
+docker exec -it metlo-db pg_dump -U postgres metlo_api_security > backup.sql
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Services won't start">
+    Check Docker logs for individual services:
+    ```bash
+    docker-compose logs backend
+    docker-compose logs ingestor
+    docker-compose logs frontend
+    ```
+  </Accordion>
+
+  <Accordion title="Cannot connect to frontend">
+    - Verify the frontend container is running: `docker ps | grep metlo-frontend`
+    - Check firewall rules allow port 8000
+    - Ensure `BACKEND_URL` is correctly set and accessible from your browser
+  </Accordion>
+
+  <Accordion title="Database connection errors">
+    - Verify PostgreSQL is running: `docker ps | grep postgres`
+    - Check database logs: `docker-compose logs db`
+    - Ensure the database initialized properly with the init.sql script
+  </Accordion>
+
+  <Accordion title="Reset deployment">
+    To completely reset your deployment:
+    ```bash
+    metlo-deploy stop
+    docker-compose down -v
+    rm -rf /opt/metlo/.env
+    metlo-deploy init
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Connect Data Sources" icon="plug" href="/integrations/overview">
+    Configure connections to capture API traffic
+  </Card>
+  <Card title="Configure Security Rules" icon="shield" href="/configuration/alerts-webhooks">
+    Set up detection rules and alerts
+  </Card>
+</CardGroup>

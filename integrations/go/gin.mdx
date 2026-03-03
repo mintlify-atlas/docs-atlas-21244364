@@ -1,0 +1,345 @@
+---
+title: Gin Integration
+description: Integrate Metlo with Gin framework for Go API security monitoring
+---
+
+Metlo provides a native middleware for the Gin web framework in Go.
+
+## Installation
+
+Install the Metlo Gin package:
+
+```bash
+go get github.com/metlo-labs/metlo/ingestors/golang/gin
+go get github.com/metlo-labs/metlo/ingestors/golang/metlo
+```
+
+## Quick Start
+
+Add Metlo middleware to your Gin application:
+
+```go
+package main
+
+import (
+    "github.com/gin-gonic/gin"
+    metloGin "github.com/metlo-labs/metlo/ingestors/golang/gin"
+    "github.com/metlo-labs/metlo/ingestors/golang/metlo"
+)
+
+func main() {
+    // Initialize Metlo
+    metloApp := metlo.InitMetlo(
+        "<YOUR_METLO_COLLECTOR_URL>",
+        "<YOUR_METLO_API_KEY>",
+    )
+    
+    // Create Gin router
+    r := gin.Default()
+    
+    // Add Metlo middleware
+    metloMiddleware := metloGin.Init(metloApp)
+    r.Use(metloMiddleware.Middleware)
+    
+    // Define routes
+    r.GET("/", func(c *gin.Context) {
+        c.JSON(200, gin.H{
+            "message": "Hello World",
+        })
+    })
+    
+    r.Run(":8080")
+}
+```
+
+## Configuration
+
+### Basic Initialization
+
+The simplest setup uses default configuration:
+
+```go
+metloApp := metlo.InitMetlo(
+    "https://collector.metlo.com",
+    "your_api_key_here",
+)
+
+metloMiddleware := metloGin.Init(metloApp)
+r.Use(metloMiddleware.Middleware)
+```
+
+### Custom Initialization
+
+For advanced configuration, use `CustomInit`:
+
+```go
+metloApp := metlo.InitMetlo(
+    "https://collector.metlo.com",
+    "your_api_key_here",
+)
+
+metloMiddleware := metloGin.CustomInit(
+    metloApp,
+    "api.example.com",  // Server host
+    8080,                // Server port
+    getUserFunc,         // Optional user extraction function
+)
+
+r.Use(metloMiddleware.Middleware)
+```
+
+<ParamField path="app" type="metloApp" required>
+  Initialized Metlo application instance
+</ParamField>
+
+<ParamField path="serverHost" type="string" default="localhost">
+  The hostname of your server for trace metadata
+</ParamField>
+
+<ParamField path="serverPort" type="int" default="0">
+  The port your server is listening on
+</ParamField>
+
+<ParamField path="getUser" type="func(*gin.Context) *string" default="nil">
+  Optional function to extract user identifier from context
+</ParamField>
+
+## User Tracking
+
+Extract user information from requests for better tracing:
+
+```go
+func getUserFromContext(c *gin.Context) *string {
+    // Extract from JWT token, session, etc.
+    userID, exists := c.Get("userID")
+    if !exists {
+        return nil
+    }
+    
+    userIDStr := userID.(string)
+    return &userIDStr
+}
+
+metloMiddleware := metloGin.CustomInit(
+    metloApp,
+    "api.example.com",
+    8080,
+    getUserFromContext,
+)
+```
+
+## How It Works
+
+The Gin middleware:
+
+1. **Wraps response writer** - Captures response data as it's written
+2. **Reads request body** - Captures and restores request body
+3. **Rate limiting** - Checks if request should be traced
+4. **Blocking** - Can block requests based on security rules
+5. **Asynchronous transmission** - Sends traces to Metlo without blocking
+
+### Request Blocking
+
+Metlo can block malicious requests based on configured rules:
+
+```go
+if m.app.ShouldBlock(request, meta) {
+    c.String(403, "Forbidden")
+    c.Abort()
+    return
+}
+```
+
+### Captured Data
+
+For each request, Metlo captures:
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers
+- Request body (up to 10KB)
+- User identifier (if configured)
+
+**Response:**
+- Status code
+- Headers
+- Response body (up to 10KB)
+
+**Metadata:**
+- Source IP and port
+- Destination host and port
+- Environment: `production`
+- Source identifier: `go/gin`
+
+## Full Example Application
+
+```go
+package main
+
+import (
+    "net/http"
+    "github.com/gin-gonic/gin"
+    metloGin "github.com/metlo-labs/metlo/ingestors/golang/gin"
+    "github.com/metlo-labs/metlo/ingestors/golang/metlo"
+)
+
+type User struct {
+    Name  string `json:"name" binding:"required"`
+    Email string `json:"email" binding:"required,email"`
+}
+
+func getUserFromContext(c *gin.Context) *string {
+    if userID, exists := c.Get("userID"); exists {
+        userIDStr := userID.(string)
+        return &userIDStr
+    }
+    return nil
+}
+
+func main() {
+    // Initialize Metlo
+    metloApp := metlo.InitMetlo(
+        "https://collector.metlo.com",
+        "your_api_key_here",
+    )
+    
+    // Create Gin router
+    r := gin.Default()
+    
+    // Add Metlo middleware
+    metloMiddleware := metloGin.CustomInit(
+        metloApp,
+        "api.example.com",
+        8080,
+        getUserFromContext,
+    )
+    r.Use(metloMiddleware.Middleware)
+    
+    // API routes
+    api := r.Group("/api")
+    {
+        api.GET("/users", func(c *gin.Context) {
+            c.JSON(http.StatusOK, gin.H{
+                "users": []User{},
+            })
+        })
+        
+        api.POST("/users", func(c *gin.Context) {
+            var user User
+            if err := c.ShouldBindJSON(&user); err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+                return
+            }
+            
+            c.JSON(http.StatusCreated, gin.H{
+                "success": true,
+                "user":    user,
+            })
+        })
+    }
+    
+    // Health check (you might want to exclude from Metlo)
+    r.GET("/health", func(c *gin.Context) {
+        c.JSON(http.StatusOK, gin.H{"status": "healthy"})
+    })
+    
+    r.Run(":8080")
+}
+```
+
+## Environment Variables
+
+Use environment variables for configuration:
+
+```go
+import (
+    "os"
+    "strconv"
+)
+
+func main() {
+    metloApp := metlo.InitMetlo(
+        os.Getenv("METLO_COLLECTOR_URL"),
+        os.Getenv("METLO_API_KEY"),
+    )
+    
+    serverPort, _ := strconv.Atoi(os.Getenv("PORT"))
+    
+    metloMiddleware := metloGin.CustomInit(
+        metloApp,
+        os.Getenv("SERVER_HOST"),
+        serverPort,
+        nil,
+    )
+    
+    r := gin.Default()
+    r.Use(metloMiddleware.Middleware)
+    
+    // ... routes ...
+    
+    r.Run(":" + os.Getenv("PORT"))
+}
+```
+
+## Body Size Limits
+
+Metlo captures up to 10KB of request and response bodies by default:
+
+```go
+const MAX_BODY int = 10 * 1024  // 10KB
+```
+
+Larger bodies are truncated to prevent memory issues.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Middleware not capturing requests">
+    Ensure:
+    - Metlo middleware is added with `r.Use(metloMiddleware.Middleware)`
+    - Middleware is added before route definitions
+    - Metlo app is properly initialized
+    - Collector URL is accessible from your application
+  </Accordion>
+
+  <Accordion title="Request body is empty">
+    The middleware reads and restores the request body. If you're reading `c.Request.Body` before the middleware, it may be consumed. Ensure Metlo middleware runs first.
+  </Accordion>
+
+  <Accordion title="Large responses causing issues">
+    Metlo limits body capture to 10KB. If you're experiencing memory issues, this limit is already applied. Consider reducing logged response sizes in your application.
+  </Accordion>
+
+  <Accordion title="Source port errors">
+    If you see "Metlo couldn't find source port" in logs, it's a warning and won't prevent tracing. The source port extraction failed but tracing continues.
+  </Accordion>
+</AccordionGroup>
+
+## Rate Limiting
+
+Metlo includes automatic rate limiting via `m.app.Allow()`. Configure rate limits when initializing the Metlo app:
+
+```go
+metloApp := metlo.InitMetlo(
+    collectorURL,
+    apiKey,
+    // Additional rate limit options in metlo.InitMetlo if supported
+)
+```
+
+## Requirements
+
+- Go >= 1.11
+- Gin >= 1.9.0
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Inventory" icon="list" href="/features/endpoint-discovery">
+    Discover your Gin API endpoints
+  </Card>
+  <Card title="Gorilla Integration" icon="code" href="/integrations/go/gorilla">
+    Use Metlo with Gorilla Mux
+  </Card>
+</CardGroup>

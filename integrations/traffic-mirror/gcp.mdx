@@ -1,0 +1,406 @@
+---
+title: GCP Packet Mirroring
+description: Mirror GCP network traffic to Metlo for comprehensive API security monitoring
+---
+
+Metlo supports GCP Packet Mirroring to capture API traffic at the network level without modifying your application code.
+
+## Overview
+
+GCP Packet Mirroring allows you to copy network traffic from:
+- **Instances** - Individual Compute Engine VMs
+- **Subnets** - All traffic within a subnet
+- **Tags** - Instances matching specific network tags
+
+Mirrored traffic is sent to a Metlo collector instance via an Internal Load Balancer.
+
+## Prerequisites
+
+<Check>
+- GCP project with Compute Engine enabled
+- Service account with appropriate permissions
+- VPC network with resources to mirror
+- Metlo collector (deployed manually or by CLI)
+- Metlo CLI installed
+</Check>
+
+## Installation
+
+Install the Metlo CLI:
+
+```bash
+npm install -g @metlo/cli
+```
+
+Or use with npx:
+
+```bash
+npx @metlo/cli
+```
+
+## Setup Packet Mirroring
+
+<Steps>
+  <Step title="Prepare GCP credentials">
+    Create a service account key file with required permissions:
+
+    ```bash
+    gcloud iam service-accounts keys create key.json \
+      --iam-account=SERVICE_ACCOUNT_EMAIL
+    ```
+
+    Download the JSON key file to use in the next step.
+  </Step>
+
+  <Step title="Run Metlo CLI setup">
+    Execute the GCP packet mirroring setup command:
+
+    ```bash
+    metlo traffic-mirror gcp setup
+    ```
+
+    The CLI will guide you through an interactive setup.
+  </Step>
+
+  <Step title="Provide GCP details">
+    Enter your GCP configuration:
+
+    ```
+    ? GCP Project ID: my-project-123
+    ? GCP Network to mirror: default
+    ? Select your GCP zone: us-central1-a
+    ? Path to GCP key file: /path/to/key.json
+    ```
+  </Step>
+
+  <Step title="Select mirror source type">
+    Choose what to mirror:
+
+    ```
+    ? Select your mirror source type:
+    ❯ INSTANCE
+      SUBNET
+      TAG
+    ```
+  </Step>
+
+  <Step title="Configure source">
+    Depending on source type:
+
+    **Instance:**
+    ```
+    ? Enter the mirror source instance name: web-server-1
+    ```
+
+    **Subnet:**
+    ```
+    ? Enter the mirror source subnet name: default
+    ```
+
+    **Tag:**
+    ```
+    ? Enter the mirror source tag: api-servers
+    ```
+  </Step>
+
+  <Step title="Configure collector">
+    The CLI will create or use an existing Metlo collector instance and configure:
+    - Collector instance
+    - Internal Load Balancer
+    - Packet mirroring policy
+  </Step>
+
+  <Step title="Verify setup">
+    List active packet mirroring policies:
+
+    ```bash
+    metlo traffic-mirror gcp list
+    ```
+  </Step>
+</Steps>
+
+## Source Types
+
+### Instance-Based Mirroring
+
+Mirror traffic from a specific Compute Engine instance:
+
+```
+? Enter the mirror source instance name: my-instance
+```
+
+- Captures all traffic to/from the instance
+- Includes all network interfaces
+- Best for monitoring specific applications
+
+### Subnet-Based Mirroring
+
+Mirror all traffic within a subnet:
+
+```
+? Enter the mirror source subnet name: default
+```
+
+- Captures traffic from all instances in the subnet
+- Useful for monitoring entire network segments
+- Scales automatically as instances are added/removed
+
+### Tag-Based Mirroring
+
+Mirror traffic from instances with a specific network tag:
+
+```
+? Enter the mirror source tag: production-api
+```
+
+- Dynamic source selection based on tags
+- Automatically includes new instances with the tag
+- Ideal for monitoring application tiers
+
+## Mirror Configuration
+
+The Metlo CLI automatically creates:
+
+### Packet Mirroring Policy
+
+Defines:
+- **Source**: Instance, subnet, or tag
+- **Collector**: Internal Load Balancer forwarding to Metlo
+- **Filter**: Optional protocol/CIDR filtering
+- **Mirrored traffic**: Can be sampled or full capture
+
+### Internal Load Balancer
+
+Configured with:
+- **Backend service**: Points to Metlo collector instances
+- **Forwarding rule**: Receives mirrored packets
+- **Protocol**: TCP/UDP load balancing
+
+### Collector Instance
+
+The Metlo collector:
+- Receives mirrored packets via ILB
+- Processes and analyzes API traffic
+- Sends data to Metlo backend
+
+## List Packet Mirroring Policies
+
+View active policies:
+
+```bash
+metlo traffic-mirror gcp list
+```
+
+Shows:
+- Policy name
+- Source configuration
+- Collector details
+- Status
+
+## Remove Packet Mirroring
+
+Delete a packet mirroring policy:
+
+```bash
+metlo traffic-mirror gcp remove
+```
+
+The CLI will:
+1. List existing policies
+2. Prompt you to select one to remove
+3. Delete the policy
+4. Optionally clean up associated resources
+
+<Warning>
+Removing a packet mirroring policy stops traffic collection immediately. The collector instance and load balancer may need to be removed separately.
+</Warning>
+
+## Cleanup
+
+Remove all Metlo resources:
+
+```bash
+metlo traffic-mirror gcp cleanup
+```
+
+This removes:
+- Packet mirroring policies
+- Collector instances
+- Load balancers
+- Firewall rules (created by Metlo)
+
+<Warning>
+This operation is destructive and cannot be undone. Ensure you have backups of any configuration you want to preserve.
+</Warning>
+
+## Architecture
+
+```
+┌─────────────────┐
+│ GCE Instance    │
+│ (Source)        │
+└────────┬────────┘
+         │ Mirrored Traffic
+         │ (Encapsulated)
+         ▼
+┌─────────────────┐
+│ Internal Load   │
+│ Balancer        │
+│ (Collector ILB) │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Metlo Collector │
+│ Instance        │
+└─────────────────┘
+```
+
+## Network Requirements
+
+### Firewall Rules
+
+Ensure the collector can:
+- Receive mirrored traffic from the ILB
+- Communicate with Metlo backend
+- Allow health checks from GCP load balancer health checkers
+
+### VPC Configuration
+
+- Source and collector must be in the same VPC
+- Subnet IP ranges must not conflict
+- Private Google Access may be required for API calls
+
+## Pricing Considerations
+
+<Warning>
+GCP Packet Mirroring incurs costs:
+- **Packet Mirroring fees**: Per-GB data mirrored
+- **Collector instance**: Compute Engine costs
+- **Internal Load Balancer**: Hourly and data processing charges
+- **Network egress**: If data leaves the region
+</Warning>
+
+Costs vary by:
+- Volume of mirrored traffic
+- Instance types used
+- Data transfer between zones/regions
+
+Use the [GCP Pricing Calculator](https://cloud.google.com/products/calculator) to estimate.
+
+## Supported Regions
+
+Metlo supports packet mirroring in all GCP regions, including:
+
+- us-central1
+- us-east1, us-east4
+- us-west1, us-west2, us-west3, us-west4
+- europe-west1, europe-west2, europe-west3, europe-west4
+- asia-east1, asia-east2
+- asia-northeast1, asia-northeast2, asia-northeast3
+- asia-south1, asia-southeast1, asia-southeast2
+- australia-southeast1
+
+## Required IAM Permissions
+
+The service account needs:
+
+```json
+{
+  "roles": [
+    "compute.packetMirroringAdmin",
+    "compute.instanceAdmin.v1",
+    "compute.loadBalancerAdmin",
+    "compute.networkAdmin"
+  ]
+}
+```
+
+Or specific permissions:
+
+```
+compute.instances.get
+compute.instances.create
+compute.instances.delete
+compute.subnetworks.get
+compute.networks.get
+compute.packetMirrorings.create
+compute.packetMirrorings.delete
+compute.packetMirrorings.get
+compute.packetMirrorings.list
+compute.forwardingRules.create
+compute.forwardingRules.delete
+compute.backendServices.create
+compute.backendServices.delete
+compute.healthChecks.create
+compute.healthChecks.delete
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Traffic not appearing in Metlo">
+    Check:
+    - Packet mirroring policy status is "ACTIVE"
+    - Collector instance is running
+    - ILB health checks are passing
+    - Firewall rules allow mirrored traffic
+    - Source instance/subnet/tag configuration is correct
+  </Accordion>
+
+  <Accordion title="Authentication failed">
+    Verify:
+    - Service account key file is valid
+    - Key file path is correct
+    - Service account has required permissions
+    - Project ID is correct
+  </Accordion>
+
+  <Accordion title="Cannot find zone/network">
+    Ensure:
+    - Zone name is spelled correctly (e.g., "us-central1-a")
+    - Network name is correct (usually "default")
+    - You have access to the specified project
+    - Compute Engine API is enabled
+  </Accordion>
+
+  <Accordion title="Collector instance creation failed">
+    Check:
+    - Project quotas for instances and IPs
+    - Zone has available resources
+    - Service account can create instances
+    - Network and subnet exist
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+- **Encrypted traffic**: Mirrored TLS traffic remains encrypted; Metlo analyzes packet metadata
+- **Data privacy**: Ensure collector is in a secure subnet with restricted access
+- **Service account security**: Use least-privilege IAM roles
+- **Network isolation**: Deploy collector in a dedicated subnet
+
+## Performance Impact
+
+Packet mirroring has minimal impact on source instances:
+- No additional latency on mirrored traffic
+- Source instance performance unaffected
+- Network bandwidth not impacted (mirroring uses separate path)
+
+## Limitations
+
+- Maximum mirrored sources per policy: Check current GCP limits
+- Cannot mirror traffic between instances in the same policy
+- Some instance types may have restrictions
+- Cross-region mirroring not supported
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="AWS Mirroring" icon="aws" href="/integrations/traffic-mirror/aws">
+    Set up traffic mirroring on AWS
+  </Card>
+  <Card title="API Inventory" icon="list" href="/features/endpoint-discovery">
+    View APIs discovered from mirrored traffic
+  </Card>
+</CardGroup>

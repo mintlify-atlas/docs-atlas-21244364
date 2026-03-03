@@ -1,0 +1,382 @@
+---
+title: Traffic Mirroring
+description: Configure traffic mirroring to send API traffic to Metlo for analysis
+---
+
+Traffic mirroring allows Metlo to analyze your API traffic without requiring code changes to your applications. By mirroring a copy of network traffic to Metlo, you can gain complete visibility into your APIs while maintaining zero impact on production performance.
+
+## What is Traffic Mirroring?
+
+Traffic mirroring (also called port mirroring or SPAN) creates a copy of network packets and sends them to a monitoring destination. Metlo receives this mirrored traffic and analyzes it for:
+
+- Endpoint discovery
+- Sensitive data detection
+- Attack patterns
+- API behavior analysis
+
+<Info>
+Traffic mirroring is completely passive—Metlo receives a copy of traffic but cannot block or modify requests. For active blocking, you need Metlo agents deployed inline.
+</Info>
+
+## Benefits of Traffic Mirroring
+
+<CardGroup cols={2}>
+  <Card title="No Code Changes" icon="code">
+    Analyze APIs without modifying application code or deploying agents
+  </Card>
+  <Card title="Zero Performance Impact" icon="gauge">
+    Mirrored traffic is processed out-of-band, no latency added to production
+  </Card>
+  <Card title="Complete Visibility" icon="eye">
+    See all API traffic, including from third-party services you don't control
+  </Card>
+  <Card title="Multi-Cloud Support" icon="cloud">
+    Works across AWS, GCP, Azure, and on-premises infrastructure
+  </Card>
+</CardGroup>
+
+## AWS Traffic Mirroring
+
+AWS provides native VPC Traffic Mirroring for EC2 instances.
+
+### Prerequisites
+
+- EC2 instances running your API servers (source)
+- Metlo ingestor instance (target)
+- Both in the same VPC or with VPC peering configured
+- Supported instance types (Nitro-based instances)
+
+### Setup Steps
+
+<Steps>
+  <Step title="Deploy Metlo Ingestor">
+    Launch a Metlo ingestor EC2 instance to receive mirrored traffic. This runs the Metlo packet capture service.
+  </Step>
+  <Step title="Create Mirror Target">
+    Configure the Metlo ingestor's network interface as the mirror target:
+    ```bash
+    aws ec2 create-traffic-mirror-target \
+      --network-interface-id eni-1234567890abcdef0 \
+      --description "Metlo Mirror Target"
+    ```
+  </Step>
+  <Step title="Create Mirror Filter">
+    Define which traffic to mirror (typically HTTP/HTTPS on ports 80/443):
+    ```bash
+    aws ec2 create-traffic-mirror-filter \
+      --description "Metlo HTTP Traffic Filter"
+    ```
+  </Step>
+  <Step title="Add Filter Rules">
+    Configure ingress and egress rules for HTTP/HTTPS traffic:
+    ```bash
+    aws ec2 create-traffic-mirror-filter-rule \
+      --traffic-mirror-filter-id tmf-1234567890abcdef0 \
+      --traffic-direction ingress \
+      --rule-number 100 \
+      --destination-port-range FromPort=80,ToPort=80 \
+      --source-cidr-block 0.0.0.0/0 \
+      --destination-cidr-block 0.0.0.0/0 \
+      --protocol 6 \
+      --rule-action accept
+    ```
+  </Step>
+  <Step title="Create Mirror Session">
+    Attach the filter to your API server instances:
+    ```bash
+    aws ec2 create-traffic-mirror-session \
+      --network-interface-id eni-source-instance \
+      --traffic-mirror-target-id tmt-1234567890abcdef0 \
+      --traffic-mirror-filter-id tmf-1234567890abcdef0 \
+      --session-number 1
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+Metlo's CLI includes automated commands to set up AWS traffic mirroring. Use `metlo-cli aws mirror create` to configure everything with a single command.
+</Tip>
+
+### AWS Mirroring Best Practices
+
+- **Instance Type**: Ensure source instances are Nitro-based (most modern EC2 types)
+- **Target Sizing**: Size the ingestor based on traffic volume (start with t3.medium, scale up if needed)  
+- **Session Limits**: AWS limits 3 mirror sessions per source interface
+- **Costs**: Mirroring has data transfer costs—monitor usage
+
+## GCP Packet Mirroring
+
+GCP provides Packet Mirroring for VPC networks.
+
+### Prerequisites
+
+- Compute Engine instances running your APIs
+- Metlo ingestor instance
+- VPC network with packet mirroring enabled
+
+### Setup Steps
+
+<Steps>
+  <Step title="Create Collector Instance">
+    Deploy a Metlo ingestor instance in your GCP project
+  </Step>
+  <Step title="Create Instance Group">
+    Add the collector to an unmanaged instance group (required for packet mirroring)
+  </Step>
+  <Step title="Configure Packet Mirroring Policy">
+    Create a policy specifying:
+    - **Mirrored sources**: Your API server instances/subnets
+    - **Collector**: The Metlo ingestor instance group
+    - **Filter**: IP protocol and port ranges (TCP 80, 443)
+  </Step>
+  <Step title="Verify Traffic Flow">
+    Check Metlo dashboard to confirm traffic is being received
+  </Step>
+</Steps>
+
+**GCP Console Steps:**
+
+1. Go to VPC Network → Packet Mirroring
+2. Click "Create Mirroring Policy"
+3. Configure:
+   - **Name**: `metlo-api-mirroring`
+   - **Source**: Select API server instances or subnets
+   - **Collector**: Select Metlo ingestor instance group
+   - **Filter**: 
+     - Protocol: TCP
+     - IP ranges: 0.0.0.0/0 (or restrict to API traffic)
+     - Ports: 80, 443, 8080, etc.
+4. Click "Create"
+
+### GCP Mirroring Considerations
+
+- **Mirroring Ratio**: GCP samples 1 in N packets by default—set to 1.0 for complete capture
+- **Load Balancers**: Configure mirroring on backend instances, not the load balancer
+- **Cross-Region**: Packet mirroring works within a single region only
+
+## Azure Network Watcher
+
+Azure uses Network Watcher packet capture for traffic mirroring.
+
+### Setup Overview
+
+<Steps>
+  <Step title="Enable Network Watcher">
+    Enable Network Watcher for your region in the Azure portal
+  </Step>
+  <Step title="Deploy Metlo Ingestor">
+    Create an Azure VM running the Metlo ingestor service
+  </Step>
+  <Step title="Configure Packet Capture">
+    Set up packet capture on API server VMs:
+    ```bash
+    az network watcher packet-capture create \
+      --resource-group MyResourceGroup \
+      --vm MyAPIServer \
+      --name MetloCapture \
+      --storage-account mystorageaccount \
+      --filters "[{protocol:TCP,localPort:80},{protocol:TCP,localPort:443}]"
+    ```
+  </Step>
+  <Step title="Stream to Metlo">
+    Configure the storage account to stream captured packets to Metlo ingestor
+  </Step>
+</Steps>
+
+<Note>
+Azure packet capture has different capabilities than AWS/GCP mirroring. For production deployments, consider using Network Security Group (NSG) flow logs with a custom processor that forwards to Metlo.
+</Note>
+
+## Kubernetes Traffic Mirroring
+
+For containerized APIs in Kubernetes, use service mesh or sidecar-based mirroring.
+
+### Using Istio
+
+Istio's Envoy sidecars can mirror traffic:
+
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-mirror
+spec:
+  hosts:
+  - api.example.com
+  http:
+  - match:
+    - uri:
+        prefix: /api/
+    route:
+    - destination:
+        host: api-service
+    mirror:
+      host: metlo-ingestor.metlo.svc.cluster.local
+    mirrorPercentage:
+      value: 100.0
+```
+
+### Using Tap
+
+Deploy Metlo as a sidecar with iptables rules to tap traffic:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-server
+spec:
+  containers:
+  - name: api
+    image: my-api:latest
+    ports:
+    - containerPort: 8080
+  - name: metlo-tap
+    image: metlo/tap:latest
+    env:
+    - name: METLO_HOST
+      value: "https://your-metlo-instance.com"
+    - name: MIRROR_PORT
+      value: "8080"
+    securityContext:
+      capabilities:
+        add: ["NET_ADMIN"]
+```
+
+## On-Premises Mirroring
+
+For on-premises deployments, configure port mirroring on your network switches.
+
+### Switch Configuration
+
+Most enterprise switches support SPAN (Switched Port Analyzer):
+
+**Cisco Example:**
+```
+monitor session 1 source interface GigabitEthernet1/0/1
+monitor session 1 destination interface GigabitEthernet1/0/24
+```
+
+**Steps:**
+1. Identify the switch port(s) carrying API traffic (source)
+2. Connect Metlo ingestor to an unused switch port (destination)  
+3. Configure SPAN session to mirror source → destination
+4. Verify mirrored traffic is reaching Metlo
+
+### TAP Devices
+
+For physical network taps:
+
+1. Install network TAP inline with API servers
+2. Connect TAP's monitor port to Metlo ingestor
+3. Configure Metlo to capture from the network interface
+
+<Warning>
+Physical taps create a single point of failure. Use bypass TAPs for production to ensure traffic passes through even if the TAP fails.
+</Warning>
+
+## Verifying Traffic Mirroring
+
+After configuration, verify Metlo is receiving traffic:
+
+<Steps>
+  <Step title="Check Ingestor Logs">
+    SSH to the Metlo ingestor and check logs:
+    ```bash
+    sudo tail -f /var/log/metlo/ingestor.log
+    ```
+    You should see packets being processed.
+  </Step>
+  <Step title="Test API Request">
+    Make a test request to one of your APIs:
+    ```bash
+    curl https://api.example.com/test
+    ```
+  </Step>
+  <Step title="Check Metlo Dashboard">
+    Within 1-2 minutes, the endpoint should appear in Metlo's endpoint inventory
+  </Step>
+  <Step title="Verify Packet Capture">
+    In Metlo, navigate to the endpoint and check for captured request/response data
+  </Step>
+</Steps>
+
+<Info>
+If endpoints aren't appearing, check firewall rules, security groups, and ensure the Metlo ingestor can receive packets on the mirrored port.
+</Info>
+
+## Troubleshooting
+
+### No Traffic Received
+
+**Check:**
+- Mirror session is active and correctly configured
+- Security groups allow traffic to ingestor
+- Ingestor service is running: `systemctl status metlo-ingestor`
+- Network interface is in promiscuous mode: `ifconfig eth0 promisc`
+
+### Partial Traffic Capture
+
+**Possible causes:**
+- Packet sampling is enabled (reduce sampling rate)
+- MTU mismatch causing packet fragmentation
+- Ingestor CPU/network bandwidth saturated (scale up)
+
+### High Costs
+
+**Optimize:**
+- Filter mirroring to only HTTP/HTTPS ports
+- Mirror specific source instances rather than entire subnets
+- Use sampling for high-volume APIs (though this reduces detection accuracy)
+- Review data transfer costs and adjust configuration
+
+## Mirroring vs. Inline Agents
+
+<CardGroup cols={2}>
+  <Card title="Traffic Mirroring">
+    **Pros:**
+    - No code changes
+    - Zero latency impact  
+    - See all traffic
+    
+    **Cons:**
+    - Cannot block attacks
+    - May miss encrypted traffic
+    - Additional infrastructure
+  </Card>
+  <Card title="Inline Agents">
+    **Pros:**
+    - Can block malicious requests
+    - More accurate traffic capture
+    - No cloud provider dependencies
+    
+    **Cons:**
+    - Requires code changes
+    - Minimal latency added
+    - Per-language implementation
+  </Card>
+</CardGroup>
+
+<Tip>
+For maximum security, combine both: use traffic mirroring for broad visibility and inline agents for critical services that need attack blocking.
+</Tip>
+
+## Best Practices
+
+<CardGroup cols={1}>
+  <Card title="Start Small">
+    Begin by mirroring traffic from a subset of API servers, validate it works, then expand
+  </Card>
+  <Card title="Monitor Costs">
+    Traffic mirroring incurs data transfer costs—set up billing alerts
+  </Card>
+  <Card title="Filter Aggressively">
+    Only mirror API traffic (HTTP/HTTPS)—avoid mirroring database or internal service traffic
+  </Card>
+  <Card title="Right-Size Ingestors">
+    Scale ingestor instances based on traffic volume—one ingestor per 1-5 Gbps of traffic
+  </Card>
+  <Card title="Encrypt Mirrored Traffic">
+    Use VPN or private connectivity between sources and Metlo ingestor
+  </Card>
+</CardGroup>

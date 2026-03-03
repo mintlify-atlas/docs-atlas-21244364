@@ -1,0 +1,396 @@
+---
+title: Spring Reactive Integration
+description: Integrate Metlo with Spring WebFlux for reactive API security monitoring
+---
+
+Metlo provides a Spring Boot starter for reactive applications using Spring WebFlux.
+
+## Installation
+
+Add the Metlo Spring Boot Reactive starter to your Maven `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>com.metlo</groupId>
+    <artifactId>spring-boot-reactive-starter</artifactId>
+    <version>0.3</version>
+</dependency>
+```
+
+<Note>
+For Gradle, add:
+```groovy
+implementation 'com.metlo:spring-boot-reactive-starter:0.3'
+```
+</Note>
+
+## Quick Start
+
+<Steps>
+  <Step title="Add dependency">
+    Add the Metlo Spring Boot Reactive starter dependency to your `pom.xml` or `build.gradle`.
+  </Step>
+
+  <Step title="Configure application.yml">
+    Add Metlo configuration to your `application.yml` or `application.properties`:
+
+    ```yaml
+    metlo:
+      enabled: true
+      api-key: <your-api-key>
+      host: https://app.metlo.com:8081
+    ```
+  </Step>
+
+  <Step title="Run your application">
+    Start your Spring Boot reactive application. Metlo will automatically capture all ServerWebExchange traces.
+  </Step>
+</Steps>
+
+## Configuration
+
+Configure Metlo using Spring Boot properties in `application.yml` or `application.properties`.
+
+### Required Properties
+
+<ParamField path="metlo.enabled" type="boolean" required>
+  Enable or disable Metlo request and response tracing
+</ParamField>
+
+<ParamField path="metlo.api-key" type="string" required>
+  Your Metlo API key for authentication
+</ParamField>
+
+<ParamField path="metlo.host" type="string" required>
+  The Metlo API host URL to send traces to
+</ParamField>
+
+### Optional Properties
+
+<ParamField path="metlo.thread-pool-size" type="integer" default="2">
+  Maximum number of threads to use for asynchronous communication
+</ParamField>
+
+<ParamField path="metlo.requests-per-second" type="integer" default="-1">
+  Maximum number of trace requests per second to capture. Use `-1` for unlimited.
+</ParamField>
+
+<ParamField path="metlo.protected-keys" type="array" default="[password, apiKey, secret]">
+  Case-insensitive list of field names to omit from headers, bodies, and query arguments
+</ParamField>
+
+<ParamField path="metlo.log-requests" type="boolean" default="false">
+  Log trace requests to application logs for debugging
+</ParamField>
+
+<ParamField path="metlo.hostname" type="string" default="null">
+  Manually set the instance hostname for tracing. Auto-detected if not specified.
+</ParamField>
+
+### Complete Configuration Example
+
+<CodeGroup>
+```yaml YAML
+metlo:
+  # Enable Metlo request and response tracing
+  enabled: true
+  
+  # The maximum number of threads to use for asynchronous communication
+  thread-pool-size: 2
+  
+  # The maximum number of trace requests per second to capture, -1 means unlimited
+  requests-per-second: -1
+  
+  # The Metlo connection API key to use for authorization
+  api-key: <your api key>
+  
+  # The Metlo API host URL to send traces to
+  host: https://app.metlo.com:8081
+  
+  # Case-insensitive collection of field names to omit from headers, bodies, and query arguments
+  protected-keys:
+    - password
+    - apiKey
+    - secret
+    - authorization
+  
+  # Log trace requests to application logs
+  log-requests: false
+  
+  # Manually set the instance hostname for tracing
+  hostname: null
+```
+
+```properties Properties
+metlo.enabled=true
+metlo.thread-pool-size=2
+metlo.requests-per-second=-1
+metlo.api-key=<your api key>
+metlo.host=https://app.metlo.com:8081
+metlo.protected-keys=password,apiKey,secret,authorization
+metlo.log-requests=false
+metlo.hostname=
+```
+</CodeGroup>
+
+## Environment-Based Configuration
+
+Use environment variables in production:
+
+```yaml
+metlo:
+  enabled: ${METLO_ENABLED:true}
+  api-key: ${METLO_API_KEY}
+  host: ${METLO_HOST:https://app.metlo.com:8081}
+  thread-pool-size: ${METLO_THREAD_POOL_SIZE:4}
+  requests-per-second: ${METLO_RPS:-1}
+```
+
+Then set environment variables:
+
+```bash
+export METLO_API_KEY="your_api_key_here"
+export METLO_HOST="https://collector.metlo.com"
+export METLO_ENABLED="true"
+```
+
+## How It Works
+
+The Spring Boot starter automatically:
+
+1. **Registers a WebFilter** - Intercepts all ServerWebExchange instances
+2. **Captures request data** - Headers, body, query parameters (respecting protected keys)
+3. **Captures response data** - Status, headers, body (respecting protected keys)
+4. **Rate limiting** - Applies configured RPS limit
+5. **Asynchronous transmission** - Sends traces using thread pool
+
+### Data Filtering
+
+The `protected-keys` configuration automatically redacts sensitive fields from:
+- Request headers
+- Response headers
+- Request body (JSON fields)
+- Response body (JSON fields)
+- Query parameters
+
+Matching is case-insensitive.
+
+### Captured Data
+
+**Request:**
+- URL (host, path, query parameters)
+- HTTP method
+- Headers (filtered)
+- Request body (filtered)
+- Source IP and port
+
+**Response:**
+- Status code
+- Headers (filtered)
+- Response body (filtered)
+- Destination IP and port
+
+**Metadata:**
+- Environment
+- Hostname (auto-detected or configured)
+- Source identifier
+- Timestamp
+
+## Full Reactive Application Example
+
+### pom.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.0.0</version>
+    </parent>
+    
+    <groupId>com.example</groupId>
+    <artifactId>demo</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>com.metlo</groupId>
+            <artifactId>spring-boot-reactive-starter</artifactId>
+            <version>0.3</version>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+### UserHandler.java
+
+```java
+package com.example.demo;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.server.ServerRequest;
+import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Mono;
+
+@Component
+public class UserHandler {
+    
+    public Mono<ServerResponse> getUsers(ServerRequest request) {
+        return ServerResponse.ok()
+            .bodyValue(Map.of("users", List.of()));
+    }
+    
+    public Mono<ServerResponse> createUser(ServerRequest request) {
+        return request.bodyToMono(Map.class)
+            .flatMap(userData -> 
+                ServerResponse.ok()
+                    .bodyValue(Map.of(
+                        "success", true,
+                        "user", userData
+                    ))
+            );
+    }
+}
+```
+
+### RouterConfig.java
+
+```java
+package com.example.demo;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.server.RouterFunction;
+import org.springframework.web.reactive.function.server.ServerResponse;
+
+import static org.springframework.web.reactive.function.server.RouterFunctions.route;
+
+@Configuration
+public class RouterConfig {
+    
+    @Bean
+    public RouterFunction<ServerResponse> userRoutes(UserHandler handler) {
+        return route()
+            .GET("/api/users", handler::getUsers)
+            .POST("/api/users", handler::createUser)
+            .build();
+    }
+}
+```
+
+### application.yml
+
+```yaml
+spring:
+  application:
+    name: demo-reactive-app
+
+server:
+  port: 8080
+
+metlo:
+  enabled: true
+  api-key: ${METLO_API_KEY}
+  host: https://app.metlo.com:8081
+  thread-pool-size: 4
+  requests-per-second: 100
+  protected-keys:
+    - password
+    - secret
+    - apiKey
+    - authorization
+  log-requests: true
+```
+
+## Protected Keys
+
+Configure which field names should be redacted from traces:
+
+```yaml
+metlo:
+  protected-keys:
+    - password
+    - apiKey
+    - api_key
+    - secret
+    - token
+    - authorization
+    - credit_card
+    - ssn
+```
+
+These keys are matched case-insensitively across:
+- HTTP headers
+- Query parameters
+- JSON request/response bodies
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Auto-configuration not working">
+    Ensure:
+    - The starter dependency is in your `pom.xml` or `build.gradle`
+    - `metlo.enabled=true` is set
+    - Spring Boot auto-configuration is not disabled
+    - Check startup logs for Metlo initialization messages
+  </Accordion>
+
+  <Accordion title="Requests not being captured">
+    Verify:
+    - `metlo.enabled` is `true`
+    - API key and host are configured correctly
+    - Check if rate limiting is too restrictive
+    - Enable `metlo.log-requests=true` to see trace logs
+  </Accordion>
+
+  <Accordion title="Sensitive data not redacted">
+    Check that:
+    - Field names are in the `protected-keys` list
+    - Keys are spelled correctly (case-insensitive matching)
+    - Data is in JSON format (filtering works on structured data)
+  </Accordion>
+
+  <Accordion title="Performance issues">
+    Try:
+    - Reducing `thread-pool-size`
+    - Lowering `requests-per-second` limit
+    - Disabling `log-requests` in production
+    - Using a local collector to reduce network latency
+  </Accordion>
+</AccordionGroup>
+
+## Requirements
+
+- Java >= 8
+- Spring Boot >= 2.0
+- Spring WebFlux
+
+## Compatibility
+
+Metlo's Spring Reactive starter works with:
+- Spring Boot 2.x and 3.x
+- Spring WebFlux (functional and annotated controllers)
+- Reactive data access (R2DBC, MongoDB Reactive)
+- Netty, Undertow, and Jetty reactive servers
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Discovery" icon="magnifying-glass" href="/features/endpoint-discovery">
+    View your discovered reactive APIs
+  </Card>
+  <Card title="Traditional Spring" icon="leaf" href="/integrations/java/spring">
+    See the non-reactive Spring integration
+  </Card>
+</CardGroup>

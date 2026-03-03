@@ -1,0 +1,349 @@
+---
+title: "Running Tests"
+description: "Execute security tests using the Metlo CLI and understand test results"
+---
+
+## Prerequisites
+
+Before running tests, ensure you have:
+
+- Metlo CLI installed
+- Test files written in YAML format
+- Metlo backend configured (if using cloud features)
+
+## Basic Usage
+
+### Run a Single Test
+
+Execute a specific test file:
+
+```bash
+metlo test run path/to/test.yaml
+```
+
+### Run Multiple Tests
+
+Run multiple test files at once:
+
+```bash
+metlo test run tests/auth.yaml tests/bola.yaml tests/sqli.yaml
+```
+
+### Run Tests from a Directory
+
+Run all tests in a directory:
+
+```bash
+metlo test run tests/*.yaml
+```
+
+## Command Options
+
+### Verbose Output
+
+Get detailed information about test execution:
+
+```bash
+metlo test run test.yaml --verbose
+```
+
+Verbose mode shows:
+- Full request and response details
+- Context variables at each step
+- Complete error stack traces
+
+### Environment Variables
+
+Provide environment variables from a file:
+
+```bash
+metlo test run test.yaml --envfile .env
+```
+
+**Example `.env` file:**
+```bash
+API_URL=https://api.staging.example.com
+AUTH_TOKEN=your-test-token
+USER_ID=12345
+```
+
+Override specific environment variables:
+
+```bash
+metlo test run test.yaml --env API_URL=https://api.prod.example.com
+```
+
+### Filter by Endpoint
+
+Run tests for specific endpoints (when using Metlo backend):
+
+```bash
+metlo test run --endpoint /api/users --method GET --host api.example.com
+```
+
+## Test Output
+
+### Successful Test
+
+When all assertions pass:
+
+```bash
+$ metlo test run auth-test.yaml
+Running test at path "auth-test.yaml":
+✓ Done running test...
+All Tests Succeeded!
+```
+
+### Failed Test
+
+When assertions fail:
+
+```bash
+$ metlo test run auth-test.yaml
+Running test at path "auth-test.yaml":
+✓ Done running test...
+Some Tests Failed.
+Request 2 Assertion 1 Failed:
+{
+    "type": "EQ",
+    "key": "resp.status",
+    "value": [401, 403]
+}
+Use the --verbose flag for more information.
+```
+
+### Failed Request
+
+When a request fails:
+
+```bash
+Request 1 Failed With Error "Network Error":
+{
+    "url": "https://api.example.com/users",
+    "method": "GET",
+    "headers": {
+        "Authorization": "Bearer token123"
+    }
+}
+```
+
+## Understanding Test Results
+
+<Steps>
+  <Step title="Test Execution">
+    Each test step is executed sequentially. The test runner:
+    - Makes the HTTP request
+    - Extracts variables from the response
+    - Runs all assertions
+  </Step>
+  
+  <Step title="Assertion Validation">
+    For each assertion, the test runner:
+    - Evaluates the assertion condition
+    - Records pass/fail status
+    - Continues to next assertion or step
+  </Step>
+  
+  <Step title="Result Reporting">
+    After all steps complete:
+    - Success: All assertions passed
+    - Failure: One or more assertions failed
+    - Error: A request failed to execute
+  </Step>
+</Steps>
+
+## Running Auto-Generated Tests
+
+### Generate Tests
+
+Generate a test from a template:
+
+```bash
+metlo test generate \
+  --test BROKEN_AUTHENTICATION \
+  --host api.example.com \
+  --endpoint /api/users/billing \
+  --method POST \
+  --path output-test.yaml
+```
+
+**Available Templates:**
+- `BOLA` - Broken Object Level Authorization
+- `BROKEN_AUTHENTICATION` - Authentication bypass testing
+- `BOLA_ADMIN` - Admin-specific BOLA testing
+- `BOLA_MULTI_TENANT` - Multi-tenant BOLA testing
+- `SQLI_TIME` - Time-based SQL injection
+- `HSTS` - HTTP Strict Transport Security validation
+- `CSP` - Content Security Policy validation
+- `GENERIC` - Generic security test
+
+### Run Auto-Generated Auth Tests
+
+Automatically generate and run authentication tests:
+
+```bash
+metlo test run-auth
+```
+
+This command:
+1. Fetches endpoints from the Metlo backend
+2. Generates authentication tests for each endpoint
+3. Runs all tests
+4. Reports results
+
+## Working with Test Estimates
+
+For tests with many steps or payload permutations, Metlo estimates the number of requests:
+
+```bash
+$ metlo test run complex-test.yaml
+Running test at path "complex-test.yaml":
+? Estimated request count is high (450). Would you like to continue? (y/N)
+```
+
+The estimate prevents accidentally running tests that make excessive requests.
+
+## Exit Codes
+
+The CLI returns standard exit codes:
+
+- `0` - All tests passed
+- `1` - One or more tests failed
+
+Use exit codes in CI/CD pipelines:
+
+```bash
+metlo test run tests/*.yaml
+if [ $? -ne 0 ]; then
+  echo "Tests failed!"
+  exit 1
+fi
+```
+
+## Debugging Failed Tests
+
+<AccordionGroup>
+  <Accordion title="Check the assertion type">
+    Ensure you're using the correct assertion type:
+    
+    ```yaml
+    # Wrong - comparing string to number
+    assert:
+      - key: resp.status
+        value: "200"
+    
+    # Correct
+    assert:
+      - key: resp.status
+        value: 200
+    ```
+  </Accordion>
+
+  <Accordion title="Verify response structure">
+    Use verbose mode to see the actual response:
+    
+    ```bash
+    metlo test run test.yaml --verbose
+    ```
+    
+    Check that your assertion keys match the response structure:
+    
+    ```yaml
+    # If response is: {"user": {"name": "John"}}
+    assert:
+      - key: resp.data.user.name
+        value: John
+    ```
+  </Accordion>
+
+  <Accordion title="Check environment variables">
+    Ensure all required variables are defined:
+    
+    ```bash
+    # List variables in .env file
+    cat .env
+    
+    # Run with specific env file
+    metlo test run test.yaml --envfile .env.staging
+    ```
+  </Accordion>
+
+  <Accordion title="Verify request format">
+    Check that headers and data are formatted correctly:
+    
+    ```yaml
+    # Ensure Content-Type matches data format
+    headers:
+      - name: Content-Type
+        value: application/json
+    data: |-
+      {"key": "value"}
+    ```
+  </Accordion>
+
+  <Accordion title="Test connectivity">
+    Verify the API is reachable:
+    
+    ```bash
+    curl https://api.example.com/health
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Usage
+
+### Custom Test Templates
+
+Run tests generated from custom templates:
+
+```bash
+metlo test generate \
+  --test ./templates/custom-auth.ts \
+  --host api.example.com \
+  --endpoint /api/data \
+  --method GET \
+  --path output.yaml
+```
+
+### Fuzzing
+
+Run fuzz testing on endpoints:
+
+```bash
+metlo test fuzz \
+  --host api.example.com \
+  --endpoint /api/search \
+  --method POST
+```
+
+### Global Environment Variables
+
+When connected to Metlo backend, tests automatically have access to global environment variables defined in the Metlo UI.
+
+These are available under the `global` namespace:
+
+```yaml
+env:
+  - name: API_KEY
+    value: {{global.PROD_API_KEY}}
+```
+
+## Performance Considerations
+
+<Card title="Request Limits" icon="gauge-high">
+  Tests with more than 300 estimated requests will prompt for confirmation. Consider:
+  - Breaking large tests into smaller, focused tests
+  - Using `stopOnFailure: true` to halt on first failure
+  - Running subsets of tests in parallel in CI/CD
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CI/CD Integration" icon="code-branch" href="/testing/ci-cd-integration">
+    Integrate tests into your deployment pipeline
+  </Card>
+  <Card title="Custom Templates" icon="wand-magic-sparkles" href="/testing/custom-templates">
+    Create custom test templates for your needs
+  </Card>
+</CardGroup>

@@ -1,0 +1,126 @@
+---
+title: Endpoint Discovery
+description: Automatically discover and inventory all API endpoints across your infrastructure
+---
+
+Metlo continuously scans your network traffic to build a comprehensive inventory of every API endpoint in your infrastructure, giving you complete visibility into your API attack surface.
+
+## How It Works
+
+Metlo analyzes network traffic and API requests to automatically discover endpoints without requiring any code changes or manual configuration.
+
+<CardGroup cols={2}>
+  <Card title="Automatic Detection" icon="radar">
+    Endpoints are discovered in real-time as traffic flows through your system
+  </Card>
+  <Card title="Smart Parameterization" icon="route">
+    Intelligently identifies path parameters to group similar endpoints together
+  </Card>
+  <Card title="Method Tracking" icon="bars">
+    Tracks all HTTP methods (GET, POST, PUT, DELETE, etc.) for each endpoint
+  </Card>
+  <Card title="Host Mapping" icon="server">
+    Maps endpoints across all your hosts and services
+  </Card>
+</CardGroup>
+
+## Discovery Process
+
+When traffic is analyzed, Metlo performs the following steps:
+
+### 1. Path Analysis
+
+Metlo parses the request path and identifies whether parts of the path are static or dynamic parameters:
+
+- Static paths: `/api/users/login`
+- Parameterized paths: `/api/users/{param1}/orders/{param2}`
+
+<Info>
+Metlo uses intelligent pattern matching to detect parameters in URLs. For example, `/api/users/12345` and `/api/users/67890` are recognized as the same endpoint: `/api/users/{param1}`
+</Info>
+
+### 2. Endpoint Matching
+
+For each incoming request, Metlo:
+- Checks if the endpoint already exists in the inventory
+- Matches based on host, method, and parameterized path
+- Creates a new endpoint entry if no match is found
+
+### 3. Metadata Tracking
+
+For each endpoint, Metlo tracks:
+- **First Detected**: When the endpoint was first seen
+- **Last Active**: Most recent request timestamp
+- **Risk Score**: Based on sensitive data exposure
+- **GraphQL Detection**: Special handling for GraphQL endpoints
+
+## Viewing Discovered Endpoints
+
+In the Metlo dashboard, you can:
+
+1. **Browse All Endpoints**: View your complete API inventory organized by host and risk level
+2. **Filter by Risk**: Quickly identify high-risk endpoints handling sensitive data
+3. **Search and Sort**: Find specific endpoints using path, method, or host filters
+4. **View Details**: Click any endpoint to see traffic patterns, data fields, and security alerts
+
+<Tip>
+Use the endpoint inventory to identify shadow APIs—endpoints that development teams may have forgotten about or that weren't properly documented.
+</Tip>
+
+## GraphQL Support
+
+Metlo provides special handling for GraphQL endpoints:
+
+- Detects GraphQL operations from requests
+- Tracks different queries and mutations as separate logical endpoints
+- Extracts schema information when available
+
+## Custom Path Configuration
+
+You can manually adjust discovered endpoints:
+
+<Steps>
+  <Step title="Mark as User Set">
+    Lock the endpoint path to prevent automatic parameterization changes
+  </Step>
+  <Step title="Edit Path">
+    Manually correct the parameterized path if Metlo incorrectly identified a parameter
+  </Step>
+  <Step title="Merge Endpoints">
+    Combine similar endpoints that should be treated as one
+  </Step>
+</Steps>
+
+## Best Practices
+
+<CardGroup cols={1}>
+  <Card title="Regular Review">
+    Review newly discovered endpoints weekly to identify unexpected API exposure
+  </Card>
+  <Card title="Risk Assessment">
+    Prioritize investigation of high-risk endpoints discovered in production
+  </Card>
+  <Card title="Documentation">
+    Use the endpoint inventory to validate your API documentation is complete
+  </Card>
+</CardGroup>
+
+## Filtering Traffic
+
+You can configure Metlo to ignore certain endpoints using block lists:
+
+- **Host Block List**: Exclude entire hosts from discovery
+- **Path Block List**: Exclude specific URL patterns
+- **Status Code Filtering**: 404 and 405 responses don't create new endpoints
+
+<Info>
+Block lists are useful for excluding health check endpoints, internal monitoring, or other non-business-critical traffic from your inventory.
+</Info>
+
+## Integration with Other Features
+
+Endpoint discovery is the foundation for Metlo's other security features:
+
+- **Sensitive Data Scanning**: Each discovered endpoint is scanned for PII
+- **Attack Detection**: Traffic patterns are analyzed per endpoint
+- **Testing**: Discovered endpoints can be added to security test suites

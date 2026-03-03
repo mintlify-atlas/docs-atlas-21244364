@@ -1,0 +1,584 @@
+---
+title: "CI/CD Integration"
+description: "Integrate Metlo security tests into your CI/CD pipelines to catch vulnerabilities before production"
+---
+
+## Overview
+
+Integrating Metlo tests into your CI/CD pipeline helps you:
+
+- Catch security vulnerabilities before they reach production
+- Automate security testing as part of your deployment process
+- Fail builds when critical security issues are detected
+- Track security test results over time
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install Metlo CLI">
+    Add Metlo CLI to your CI/CD environment
+  </Step>
+  <Step title="Prepare Test Files">
+    Store test files in your repository (e.g., `tests/` directory)
+  </Step>
+  <Step title="Configure Environment Variables">
+    Set up secrets for API keys, tokens, and other sensitive data
+  </Step>
+</Steps>
+
+## GitHub Actions
+
+### Basic Workflow
+
+Create `.github/workflows/security-tests.yml`:
+
+```yaml
+name: Security Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install Metlo CLI
+        run: npm install -g @metlo/cli
+      
+      - name: Run security tests
+        env:
+          API_URL: ${{ secrets.STAGING_API_URL }}
+          AUTH_TOKEN: ${{ secrets.TEST_AUTH_TOKEN }}
+        run: |
+          metlo test run tests/*.yaml --envfile .env.ci
+```
+
+### With Test Results Artifact
+
+Capture test results for later review:
+
+```yaml
+name: Security Tests
+
+on: [pull_request, push]
+
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install Metlo CLI
+        run: npm install -g @metlo/cli
+      
+      - name: Run security tests
+        env:
+          API_URL: ${{ secrets.STAGING_API_URL }}
+          AUTH_TOKEN: ${{ secrets.TEST_AUTH_TOKEN }}
+        run: |
+          metlo test run tests/*.yaml --verbose > test-results.log 2>&1
+        continue-on-error: true
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-test-results
+          path: test-results.log
+      
+      - name: Check test status
+        run: |
+          if ! metlo test run tests/*.yaml; then
+            echo "Security tests failed!"
+            exit 1
+          fi
+```
+
+### Multi-Environment Testing
+
+Test against multiple environments:
+
+```yaml
+name: Security Tests
+
+on: [pull_request]
+
+jobs:
+  test-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm install -g @metlo/cli
+      - name: Test staging
+        env:
+          API_URL: ${{ secrets.STAGING_API_URL }}
+          AUTH_TOKEN: ${{ secrets.STAGING_AUTH_TOKEN }}
+        run: metlo test run tests/*.yaml
+  
+  test-production:
+    runs-on: ubuntu-latest
+    needs: test-staging
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm install -g @metlo/cli
+      - name: Test production
+        env:
+          API_URL: ${{ secrets.PROD_API_URL }}
+          AUTH_TOKEN: ${{ secrets.PROD_AUTH_TOKEN }}
+        run: metlo test run tests/critical/*.yaml
+```
+
+## GitLab CI
+
+### Basic Pipeline
+
+Create `.gitlab-ci.yml`:
+
+```yaml
+stages:
+  - test
+
+security-tests:
+  stage: test
+  image: node:18
+  before_script:
+    - npm install -g @metlo/cli
+  script:
+    - metlo test run tests/*.yaml --envfile .env.ci
+  variables:
+    API_URL: $STAGING_API_URL
+    AUTH_TOKEN: $TEST_AUTH_TOKEN
+  only:
+    - merge_requests
+    - main
+    - develop
+```
+
+### With Test Reports
+
+```yaml
+stages:
+  - test
+
+security-tests:
+  stage: test
+  image: node:18
+  before_script:
+    - npm install -g @metlo/cli
+  script:
+    - metlo test run tests/*.yaml --verbose | tee test-results.log
+  artifacts:
+    when: always
+    paths:
+      - test-results.log
+    expire_in: 30 days
+  variables:
+    API_URL: $STAGING_API_URL
+    AUTH_TOKEN: $TEST_AUTH_TOKEN
+  allow_failure: false
+```
+
+### Environment-Specific Tests
+
+```yaml
+stages:
+  - test
+
+test:staging:
+  stage: test
+  image: node:18
+  before_script:
+    - npm install -g @metlo/cli
+  script:
+    - metlo test run tests/*.yaml
+  environment:
+    name: staging
+  variables:
+    API_URL: $STAGING_API_URL
+    AUTH_TOKEN: $STAGING_AUTH_TOKEN
+  only:
+    - merge_requests
+    - develop
+
+test:production:
+  stage: test
+  image: node:18
+  before_script:
+    - npm install -g @metlo/cli
+  script:
+    - metlo test run tests/critical/*.yaml
+  environment:
+    name: production
+  variables:
+    API_URL: $PROD_API_URL
+    AUTH_TOKEN: $PROD_AUTH_TOKEN
+  only:
+    - main
+  when: manual
+```
+
+## Jenkins
+
+### Declarative Pipeline
+
+Create `Jenkinsfile`:
+
+```groovy
+pipeline {
+    agent any
+    
+    environment {
+        API_URL = credentials('staging-api-url')
+        AUTH_TOKEN = credentials('test-auth-token')
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                sh 'npm install -g @metlo/cli'
+            }
+        }
+        
+        stage('Security Tests') {
+            steps {
+                sh 'metlo test run tests/*.yaml --envfile .env.ci'
+            }
+        }
+    }
+    
+    post {
+        always {
+            archiveArtifacts artifacts: '*.log', allowEmptyArchive: true
+        }
+        failure {
+            emailext (
+                subject: "Security Tests Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+                body: "Security tests failed. Check console output for details.",
+                to: "security-team@example.com"
+            )
+        }
+    }
+}
+```
+
+### With Parallel Execution
+
+```groovy
+pipeline {
+    agent any
+    
+    stages {
+        stage('Security Tests') {
+            parallel {
+                stage('Auth Tests') {
+                    steps {
+                        sh 'metlo test run tests/auth/*.yaml'
+                    }
+                }
+                stage('BOLA Tests') {
+                    steps {
+                        sh 'metlo test run tests/bola/*.yaml'
+                    }
+                }
+                stage('Injection Tests') {
+                    steps {
+                        sh 'metlo test run tests/injection/*.yaml'
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+## CircleCI
+
+### Basic Configuration
+
+Create `.circleci/config.yml`:
+
+```yaml
+version: 2.1
+
+jobs:
+  security-tests:
+    docker:
+      - image: cimg/node:18.0
+    steps:
+      - checkout
+      - run:
+          name: Install Metlo CLI
+          command: npm install -g @metlo/cli
+      - run:
+          name: Run security tests
+          command: metlo test run tests/*.yaml --envfile .env.ci
+          environment:
+            API_URL: ${STAGING_API_URL}
+            AUTH_TOKEN: ${TEST_AUTH_TOKEN}
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - security-tests:
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+```
+
+## Azure Pipelines
+
+### Pipeline Configuration
+
+Create `azure-pipelines.yml`:
+
+```yaml
+trigger:
+  - main
+  - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: NodeTool@0
+  inputs:
+    versionSpec: '18.x'
+  displayName: 'Install Node.js'
+
+- script: |
+    npm install -g @metlo/cli
+  displayName: 'Install Metlo CLI'
+
+- script: |
+    metlo test run tests/*.yaml --envfile .env.ci
+  displayName: 'Run security tests'
+  env:
+    API_URL: $(STAGING_API_URL)
+    AUTH_TOKEN: $(TEST_AUTH_TOKEN)
+
+- task: PublishBuildArtifacts@1
+  condition: always()
+  inputs:
+    pathToPublish: '*.log'
+    artifactName: 'test-results'
+```
+
+## Docker-Based Testing
+
+Run tests in a Docker container:
+
+### Dockerfile
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /tests
+
+RUN npm install -g @metlo/cli
+
+COPY tests/ ./tests/
+COPY .env.ci .env.ci
+
+CMD ["metlo", "test", "run", "tests/*.yaml", "--envfile", ".env.ci"]
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+
+services:
+  security-tests:
+    build: .
+    environment:
+      - API_URL=${STAGING_API_URL}
+      - AUTH_TOKEN=${TEST_AUTH_TOKEN}
+    volumes:
+      - ./tests:/tests/tests
+      - ./results:/tests/results
+```
+
+Run tests:
+
+```bash
+docker-compose run security-tests
+```
+
+## Environment Variable Management
+
+<CodeGroup>
+
+```bash .env.ci
+API_URL=https://api.staging.example.com
+AUTH_TOKEN=${CI_AUTH_TOKEN}
+USER_ID=test-user-123
+TIMEOUT=30000
+```
+
+```bash .env.staging
+API_URL=https://api.staging.example.com
+```
+
+```bash .env.production
+API_URL=https://api.example.com
+```
+
+</CodeGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Run tests on every pull request">
+    Catch security issues before they're merged:
+    
+    ```yaml
+    on:
+      pull_request:
+        branches: [main, develop]
+    ```
+  </Accordion>
+
+  <Accordion title="Use separate environments">
+    Test against staging or dedicated test environments, not production:
+    
+    ```yaml
+    env:
+      API_URL: ${{ secrets.STAGING_API_URL }}
+    ```
+  </Accordion>
+
+  <Accordion title="Store sensitive data in CI secrets">
+    Never commit credentials to your repository:
+    
+    - GitHub: Repository Settings → Secrets
+    - GitLab: Settings → CI/CD → Variables
+    - Jenkins: Credentials plugin
+    - CircleCI: Project Settings → Environment Variables
+  </Accordion>
+
+  <Accordion title="Fail fast on critical issues">
+    Set exit codes to fail the build:
+    
+    ```yaml
+    - name: Run critical tests
+      run: metlo test run tests/critical/*.yaml
+      # Pipeline fails if tests fail
+    ```
+  </Accordion>
+
+  <Accordion title="Run subsets of tests at different stages">
+    - PR: Quick smoke tests
+    - Merge to develop: Full test suite
+    - Production deployment: Critical tests only
+    
+    ```yaml
+    # On PR
+    - metlo test run tests/smoke/*.yaml
+    
+    # On merge
+    - metlo test run tests/**/*.yaml
+    
+    # On deploy
+    - metlo test run tests/critical/*.yaml
+    ```
+  </Accordion>
+
+  <Accordion title="Archive test results">
+    Save test output for debugging:
+    
+    ```yaml
+    - uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: test-results.log
+    ```
+  </Accordion>
+
+  <Accordion title="Set up notifications">
+    Alert your team when tests fail:
+    
+    - Slack notifications
+    - Email alerts
+    - GitHub PR comments
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tests pass locally but fail in CI">
+    Common causes:
+    - Different environment variables
+    - Network access restrictions
+    - Timing issues (add delays if needed)
+    - Different Node.js versions
+    
+    Solutions:
+    - Verify environment variables are set
+    - Check CI environment can reach your API
+    - Pin Node.js version in CI config
+  </Accordion>
+
+  <Accordion title="Tests timeout in CI">
+    CI environments may have stricter timeouts:
+    
+    ```yaml
+    - name: Run tests
+      run: metlo test run tests/*.yaml
+      timeout-minutes: 10
+    ```
+  </Accordion>
+
+  <Accordion title="Rate limiting issues">
+    Space out test execution:
+    
+    ```yaml
+    - name: Run tests sequentially
+      run: |
+        for test in tests/*.yaml; do
+          metlo test run "$test"
+          sleep 2
+        done
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Writing Tests" icon="pen" href="/testing/writing-tests">
+    Learn how to write comprehensive security tests
+  </Card>
+  <Card title="Custom Templates" icon="wand-magic-sparkles" href="/testing/custom-templates">
+    Create custom test templates for your needs
+  </Card>
+</CardGroup>

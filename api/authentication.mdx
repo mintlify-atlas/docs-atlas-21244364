@@ -1,0 +1,241 @@
+---
+title: Authentication
+description: Learn how to authenticate with the Metlo API using API keys
+---
+
+The Metlo API uses API key authentication to secure access to your data. All requests must include a valid API key in the request headers.
+
+## API Key Types
+
+Metlo supports different types of API keys for different purposes:
+
+- **GENERIC**: General-purpose API access
+- **ONBOARDING**: Used for initial setup and onboarding
+- **GCP**: Integration with Google Cloud Platform
+- **AWS**: Integration with Amazon Web Services
+
+## Obtaining an API Key
+
+### Create a New API Key
+
+<CodeGroup>
+```bash cURL
+curl -X POST 'https://<your-metlo-instance>/api/v1/keys/create' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "my-api-key",
+    "keyFor": "GENERIC"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://<your-metlo-instance>/api/v1/keys/create', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    name: 'my-api-key',
+    keyFor: 'GENERIC'
+  })
+});
+
+const data = await response.json();
+console.log('API Key:', data.apiKey);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://<your-metlo-instance>/api/v1/keys/create',
+    json={
+        'name': 'my-api-key',
+        'keyFor': 'GENERIC'
+    }
+)
+
+data = response.json()
+print('API Key:', data['apiKey'])
+```
+</CodeGroup>
+
+#### Request Body
+
+<ParamField body="name" type="string" required>
+  Unique name for your API key
+</ParamField>
+
+<ParamField body="keyFor" type="string">
+  Type of API key: `GENERIC`, `ONBOARDING`, `GCP`, or `AWS`
+</ParamField>
+
+#### Response
+
+<ResponseField name="apiKey" type="string">
+  The full API key. **Save this securely - it won't be shown again!**
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name you assigned to the key
+</ResponseField>
+
+<ResponseField name="identifier" type="string">
+  A public identifier in the format `metlo.<key_identifier>`
+</ResponseField>
+
+<ResponseField name="created" type="string">
+  ISO 8601 timestamp of when the key was created
+</ResponseField>
+
+<ResponseField name="for" type="string">
+  The type of API key
+</ResponseField>
+
+```json Response Example
+{
+  "apiKey": "metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "name": "my-api-key",
+  "identifier": "metlo.abc123xyz",
+  "created": "2026-03-03T12:00:00.000Z",
+  "for": "GENERIC"
+}
+```
+
+<Warning>
+  **Important**: The full API key is only displayed once during creation. Store it securely in a password manager or secrets management system.
+</Warning>
+
+## Using Your API Key
+
+Include your API key in the `Authorization` header of every request:
+
+```bash
+curl 'https://<your-metlo-instance>/api/v1/endpoints' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Authentication Flow
+
+When you make a request:
+
+1. Metlo hashes the API key from your `Authorization` header
+2. Checks if the hashed key exists in the database (with 5-second Redis caching)
+3. If valid, processes your request
+4. If invalid, returns `401 Unauthorized`
+
+## Managing API Keys
+
+### List All API Keys
+
+Retrieve all API keys for your instance:
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/keys/list' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+#### Response
+
+```json
+[
+  {
+    "name": "my-api-key",
+    "identifier": "metlo.abc123xyz",
+    "created": "2026-03-03T12:00:00.000Z",
+    "for": "GENERIC"
+  },
+  {
+    "name": "onboarding-key",
+    "identifier": "metlo.def456uvw",
+    "created": "2026-03-01T10:00:00.000Z",
+    "for": "ONBOARDING"
+  }
+]
+```
+
+<Note>
+  The list endpoint returns key metadata only. The actual API key values are never retrievable after creation.
+</Note>
+
+### Get Onboarding Keys
+
+Retrieve keys specifically for onboarding purposes:
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/keys/onboarding' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Delete an API Key
+
+Remove an API key by its name:
+
+```bash cURL
+curl -X DELETE 'https://<your-metlo-instance>/api/v1/keys/my-api-key/delete' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+#### Response
+
+```json
+{
+  "status": "OK"
+}
+```
+
+## API Key Limits
+
+Your Metlo instance has a maximum limit on the number of API keys you can create. If you reach this limit, you'll receive an error:
+
+```json
+"Maximum API Key Limit Reached: 50. Consider deleting any that are not in use."
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Store API keys securely">
+    Never commit API keys to source code. Use environment variables or a secrets management system.
+    
+    ```bash
+    export METLO_API_KEY="metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ```
+  </Accordion>
+  
+  <Accordion title="Rotate keys regularly">
+    Create new API keys and delete old ones periodically to minimize risk if a key is compromised.
+  </Accordion>
+  
+  <Accordion title="Use specific key types">
+    Create keys with specific purposes (e.g., separate keys for different integrations) to make rotation easier.
+  </Accordion>
+  
+  <Accordion title="Delete unused keys">
+    Regularly audit and remove API keys that are no longer needed.
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+### 401 Unauthorized
+
+Returned when:
+- No API key is provided
+- The API key is invalid
+- The API key has been deleted
+
+```json
+"Client unauthorized"
+```
+
+### 400 Bad Request
+
+Returned when creating a key with:
+- Duplicate name
+- Missing name
+- Invalid key type
+
+```json
+"Can not create key with name my-api-key"
+```
