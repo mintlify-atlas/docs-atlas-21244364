@@ -1,0 +1,251 @@
+---
+title: Summary & Settings
+description: Dashboard summary metrics and instance configuration endpoints
+---
+
+## Summary API
+
+The Summary API provides high-level metrics and statistics for your Metlo dashboard.
+
+### Get Dashboard Summary
+
+Retrieve overall statistics including endpoints, alerts, and traffic metrics.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/summary' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+#### Response
+
+<ResponseField name="numEndpoints" type="number">
+  Total number of discovered API endpoints
+</ResponseField>
+
+<ResponseField name="numHighRiskEndpoints" type="number">
+  Number of endpoints with high risk scores
+</ResponseField>
+
+<ResponseField name="numAlerts" type="number">
+  Total number of active alerts
+</ResponseField>
+
+<ResponseField name="numPIIDataFields" type="number">
+  Total number of detected PII data fields
+</ResponseField>
+
+<ResponseField name="numAttacks" type="number">
+  Total number of detected attacks
+</ResponseField>
+
+<ResponseField name="topAlertTypes" type="object[]">
+  Most common alert types
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Alert type name
+    </ResponseField>
+    <ResponseField name="count" type="number">
+      Number of alerts of this type
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Example Response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "numEndpoints": 247,
+    "numHighRiskEndpoints": 12,
+    "numAlerts": 34,
+    "numPIIDataFields": 89,
+    "numAttacks": 5,
+    "topAlertTypes": [
+      { "type": "PII_DATA_DETECTED", "count": 15 },
+      { "type": "UNAUTHENTICATED_ENDPOINT", "count": 10 },
+      { "type": "HIGH_ERROR_RATE", "count": 9 }
+    ]
+  }
+}
+```
+
+### Get Endpoint Tracking Status
+
+Check whether specific endpoints are being tracked by Metlo.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/summary/endpoint-tracked' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Get Sensitive Data Summary
+
+Retrieve a summary of sensitive data findings across all endpoints.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/sensitive-data-summary' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+#### Response
+
+Returns aggregate statistics about sensitive data detected in your APIs, organized by data class and severity.
+
+## Instance Settings API
+
+Manage global configuration settings for your Metlo instance.
+
+### Get Instance Settings
+
+Retrieve current instance configuration.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/instance-settings' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+#### Response
+
+<ResponseField name="uuid" type="string">
+  Unique instance identifier
+</ResponseField>
+
+<ResponseField name="blockingEnabled" type="boolean">
+  Whether attack blocking is enabled globally
+</ResponseField>
+
+<ResponseField name="skippedResolved" type="boolean">
+  Whether to skip already resolved issues during scans
+</ResponseField>
+
+<ResponseField name="updateEmail" type="string">
+  Email address for update notifications
+</ResponseField>
+
+<ResponseField name="metloAPIKey" type="string">
+  API key for Metlo cloud services (if using enterprise features)
+</ResponseField>
+
+#### Example Response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "blockingEnabled": true,
+    "skippedResolved": false,
+    "updateEmail": "security@example.com",
+    "metloAPIKey": null
+  }
+}
+```
+
+### Update Instance Settings
+
+Modify instance configuration settings.
+
+```bash cURL
+curl -X PUT 'https://<your-metlo-instance>/api/v1/instance-settings' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "blockingEnabled": true,
+    "skippedResolved": false,
+    "updateEmail": "security@example.com"
+  }'
+```
+
+#### Request Body
+
+<ParamField body="blockingEnabled" type="boolean">
+  Enable or disable attack blocking globally
+</ParamField>
+
+<ParamField body="skippedResolved" type="boolean">
+  Whether to skip resolved issues in scans
+</ParamField>
+
+<ParamField body="updateEmail" type="string">
+  Email for update notifications
+</ParamField>
+
+<ParamField body="metloAPIKey" type="string">
+  Metlo cloud services API key (enterprise)
+</ParamField>
+
+<Warning>
+Disabling `blockingEnabled` will turn off attack blocking across your entire infrastructure. Use with caution.
+</Warning>
+
+## OpenAPI Spec Management
+
+Metlo provides endpoints to manage OpenAPI specifications for your APIs.
+
+### Upload OpenAPI Spec
+
+Upload or update an OpenAPI specification.
+
+```bash cURL
+curl -X POST 'https://<your-metlo-instance>/api/v1/spec' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "users-api-v1",
+    "spec": "{ ... OpenAPI spec JSON ... }",
+    "hosts": ["api.example.com"]
+  }'
+```
+
+### List OpenAPI Specs
+
+Get all uploaded OpenAPI specifications.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/specs' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Get OpenAPI Spec
+
+Retrieve a specific OpenAPI specification by name.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/spec/users-api-v1' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Delete OpenAPI Spec
+
+Remove an OpenAPI specification.
+
+```bash cURL
+curl -X DELETE 'https://<your-metlo-instance>/api/v1/spec/users-api-v1' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+### Download Specs as ZIP
+
+Download all OpenAPI specifications as a ZIP archive.
+
+```bash cURL
+curl 'https://<your-metlo-instance>/api/v1/specs/zip' \
+  -H 'Authorization: metlo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -o specs.zip
+```
+
+<Info>
+OpenAPI specifications help Metlo validate actual API behavior against documented contracts and detect drift.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Endpoints API" icon="route" href="/api/endpoints">
+    Manage discovered endpoints
+  </Card>
+  <Card title="Alerts API" icon="bell" href="/api/alerts">
+    Configure and manage alerts
+  </Card>
+</CardGroup>

@@ -154,7 +154,8 @@
               "api/endpoints",
               "api/alerts",
               "api/data-classes",
-              "api/testing"
+              "api/testing",
+              "api/summary-settings"
             ]
           }
         ]

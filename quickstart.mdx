@@ -118,20 +118,16 @@ For Node.js apps (Express, Koa, Fastify), install the Metlo package:
   </Step>
 
   <Step title="Configure Express Middleware">
-    Add Metlo middleware to your Express application:
+    Add Metlo to your Express application:
 
     ```javascript
+    const metlo = require("metlo");
     const express = require("express");
-    const { MetloSDK } = require("metlo");
+
+    // Initialize Metlo - must be first
+    metlo("<YOUR_METLO_API_KEY>", "http://localhost:8081");
 
     const app = express();
-
-    // Initialize Metlo - must be first middleware
-    app.use(
-      MetloSDK({
-        host: "http://localhost:8081",
-      })
-    );
 
     // Your routes here
     app.get("/api/users", (req, res) => {
@@ -140,6 +136,10 @@ For Node.js apps (Express, Koa, Fastify), install the Metlo package:
 
     app.listen(3000);
     ```
+    
+    <Note>
+    Replace `<YOUR_METLO_API_KEY>` with an actual API key from your Metlo dashboard.
+    </Note>
   </Step>
 
   <Step title="Start Your Application">
@@ -153,12 +153,12 @@ For Python apps (Flask, Django, FastAPI), use the Python ingestor:
 
 ```python
 from flask import Flask
-from metlo import MetloFlask
+from metlo.flask import MetloFlask
 
 app = Flask(__name__)
 
 # Initialize Metlo
-MetloFlask(app, "http://localhost:8081")
+MetloFlask(app, "http://localhost:8081", "<YOUR_METLO_API_KEY>")
 
 @app.route("/api/users")
 def get_users():
