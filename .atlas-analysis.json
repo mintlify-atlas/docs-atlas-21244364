@@ -1,0 +1,179 @@
+{
+  "projectType": "saas",
+  "projectName": "Metlo",
+  "projectDescription": "Open-source API security platform for detecting attacks, blocking malicious traffic, and securing your APIs in real time",
+  "theme": "aspen",
+  "primaryColor": "#1E40AF",
+  "lightColor": "#3B82F6",
+  "darkColor": "#1E3A8A",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/aws",
+              "deployment/gcp",
+              "deployment/azure"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/endpoint-discovery",
+              "features/sensitive-data-scanning",
+              "features/attack-detection",
+              "features/attack-blocking",
+              "features/traffic-mirroring"
+            ]
+          },
+          {
+            "group": "Testing",
+            "pages": [
+              "testing/overview",
+              "testing/writing-tests",
+              "testing/running-tests",
+              "testing/ci-cd-integration",
+              "testing/custom-templates"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/metlo-config",
+              "configuration/environment-variables",
+              "configuration/alerts-webhooks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integrations",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "integrations/overview"
+            ]
+          },
+          {
+            "group": "Node.js",
+            "pages": [
+              "integrations/node/express",
+              "integrations/node/koa",
+              "integrations/node/fastify"
+            ]
+          },
+          {
+            "group": "Python",
+            "pages": [
+              "integrations/python/django",
+              "integrations/python/flask"
+            ]
+          },
+          {
+            "group": "Java",
+            "pages": [
+              "integrations/java/spring",
+              "integrations/java/spring-reactive"
+            ]
+          },
+          {
+            "group": "Go",
+            "pages": [
+              "integrations/go/gin",
+              "integrations/go/gorilla"
+            ]
+          },
+          {
+            "group": "Traffic Mirroring",
+            "pages": [
+              "integrations/traffic-mirror/aws",
+              "integrations/traffic-mirror/gcp"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "cli/installation",
+              "cli/initialization"
+            ]
+          },
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/test",
+              "cli/traffic-mirror",
+              "cli/template",
+              "cli/fuzz"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/endpoints",
+              "api/alerts",
+              "api/data-classes",
+              "api/testing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Endpoint Discovery - Automatic API inventory from network traffic",
+    "Sensitive Data Scanning - PII detection with risk scoring",
+    "Attack Detection - Real-time identification of malicious requests",
+    "Attack Blocking - Automatic blocking of bad actors",
+    "API Security Testing - Built-in framework for OWASP Top 10 vulnerabilities",
+    "Traffic Mirroring - AWS and GCP traffic mirror setup",
+    "Multi-language Support - Agents for Node.js, Python, Java, and Go",
+    "CI/CD Integration - Security testing in development and staging"
+  ],
+  "publicApiSurface": [
+    "CLI: metlo init - Initialize Metlo CLI configuration",
+    "CLI: metlo test generate - Generate security tests",
+    "CLI: metlo test run - Execute security tests",
+    "CLI: metlo traffic-mirror aws - Setup AWS traffic mirroring",
+    "CLI: metlo traffic-mirror gcp - Setup GCP traffic mirroring",
+    "CLI: metlo template - Manage custom test templates",
+    "CLI: metlo fuzz - Fuzz testing for APIs",
+    "Agent: metlo (Node.js) - Express/Koa/Fastify middleware",
+    "Agent: metlo (Python) - Django/Flask middleware",
+    "Agent: metlo (Java) - Spring/Spring Reactive filters",
+    "Agent: metlo (Go) - Gin/Gorilla middleware",
+    "API: /api/v1/endpoints - Manage API endpoints",
+    "API: /api/v1/alerts - Configure alerts",
+    "API: /api/v1/testing - Manage security tests",
+    "API: /api/v1/data-classes - Handle sensitive data classification"
+  ]
+}
